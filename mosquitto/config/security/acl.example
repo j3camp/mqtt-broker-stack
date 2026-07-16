@@ -1,0 +1,9 @@
+# ACL example — copy to /mosquitto/config/security/acl to customise.
+# Enable with: ./scripts/enable-acl.sh
+
+user admin
+topic readwrite #
+
+user device-001
+topic read devices/device-001/config
+topic write devices/device-001/telemetry/#

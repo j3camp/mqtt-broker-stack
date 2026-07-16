@@ -1,0 +1,23 @@
+# Runtime secrets — never commit
+.env
+
+# Generated certificates and keys
+mosquitto/config/certs/*.key
+mosquitto/config/certs/*.crt
+mosquitto/config/certs/*.pem
+mosquitto/config/certs/*.csr
+
+# CA material (kept outside Mosquitto mounts)
+certs/
+
+# Runtime security files
+mosquitto/config/security/passwords
+mosquitto/config/security/acl
+
+# Backup archives
+backups/
+*.tar.gz
+
+# Temporary files
+tmp/
+*.tmp
