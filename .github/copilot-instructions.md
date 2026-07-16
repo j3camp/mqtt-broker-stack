@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-`mqtt-broker-stack` is a Docker Compose–based commercial MQTT Broker deployment stack built around Eclipse Mosquitto.
+`mqtt-broker-stack` is a Docker Compose-based commercial MQTT Broker deployment stack built around Eclipse Mosquitto.
 
 The project starts as a secure, maintainable Mosquitto deployment package and may later expand with:
 

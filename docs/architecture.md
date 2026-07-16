@@ -2,7 +2,7 @@
 
 ## Overview
 
-`mqtt-broker-stack` is a Docker Compose–based deployment of Eclipse Mosquitto with two separate listeners:
+`mqtt-broker-stack` is a Docker Compose-based deployment of Eclipse Mosquitto with two separate listeners:
 
 - **Internal listener** (port 1883): Plaintext MQTT for trusted Docker services only
 - **External listener** (port 8883): MQTT over TLS requiring username and password
