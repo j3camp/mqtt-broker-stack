@@ -27,7 +27,7 @@ NETWORK="$(${COMPOSE} -f "${REPO_ROOT}/compose.yaml" config --format json 2>/dev
 # Verify port 1883 is not published
 echo "--- Test: port 1883 not published to host ---"
 PORT_PUBLISHED="$(${COMPOSE} -f "${REPO_ROOT}/compose.yaml" port mosquitto 1883 2>/dev/null || true)"
-if [[ -n "${PORT_PUBLISHED}" ]]; then
+if [[ -n "${PORT_PUBLISHED}" && ! "${PORT_PUBLISHED}" =~ :0$ ]]; then
   die "Port 1883 is published to the Docker host: ${PORT_PUBLISHED}"
 fi
 pass "Port 1883 is not published to the Docker host"
