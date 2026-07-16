@@ -63,7 +63,7 @@ Files excluded from Git (see `.gitignore`):
 | File | Recommended Mode |
 |------|-----------------|
 | `mosquitto/config/security/passwords` | `600` |
-| `mosquitto/config/certs/server.key` | `600` |
+| `mosquitto/config/certs/server.key` | `644` (world-readable so the Mosquitto process can read it from a read-only Docker volume mount) |
 | `certs/ca/ca.key` | `600` |
 
 ## Internal Listener Security

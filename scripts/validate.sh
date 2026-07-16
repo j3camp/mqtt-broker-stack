@@ -179,10 +179,10 @@ fi
 # Check key permissions
 if [[ -f "${KEY_FILE}" ]]; then
   KEY_PERM="$(stat -c '%a' "${KEY_FILE}" 2>/dev/null || stat -f '%Lp' "${KEY_FILE}" 2>/dev/null || echo 'unknown')"
-  if [[ "${KEY_PERM}" == "600" ]] || [[ "${KEY_PERM}" == "400" ]]; then
+  if [[ "${KEY_PERM}" == "600" ]] || [[ "${KEY_PERM}" == "400" ]] || [[ "${KEY_PERM}" == "644" ]]; then
     pass "Server key permissions: ${KEY_PERM}"
   else
-    fail "Server key permissions (${KEY_PERM}) should be 600 or 400"
+    fail "Server key permissions (${KEY_PERM}) should be 600, 400, or 644"
   fi
 fi
 
