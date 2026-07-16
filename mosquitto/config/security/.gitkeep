@@ -1,0 +1,5 @@
+# Runtime security files are not committed to Git.
+# This file keeps the directory in version control.
+# Files created at runtime:
+#   passwords  — Mosquitto password file (mosquitto_passwd format)
+#   acl        — Mosquitto ACL file (optional, enabled by enable-acl.sh)

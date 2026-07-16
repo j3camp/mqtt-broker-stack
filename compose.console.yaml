@@ -1,0 +1,20 @@
+---
+services:
+  mosquitto:
+    expose:
+      - "9001"
+    ports:
+      - "${MQTT_WSS_BIND_ADDRESS:-127.0.0.1}:${MQTT_WSS_PORT:-9001}:9001"
+    volumes:
+      - ./mosquitto/config/conf.d/40-websocket.conf.example:/mosquitto/config/conf.d/40-websocket.conf:ro
+
+  mqttx-web:
+    image: emqx/mqttx-web:latest
+    restart: unless-stopped
+    ports:
+      - "${MQTTX_BIND_ADDRESS:-127.0.0.1}:${MQTTX_PORT:-80}:80"
+    networks:
+      - mqtt-internal
+
+networks:
+  mqtt-internal:

@@ -1,0 +1,44 @@
+---
+services:
+  mosquitto:
+    image: eclipse-mosquitto:${MOSQUITTO_VERSION}
+    restart: unless-stopped
+
+    ports:
+      - "${MQTT_TLS_BIND_ADDRESS:-0.0.0.0}:${MQTT_TLS_PORT:-8883}:8883"
+
+    expose:
+      - "1883"
+
+    networks:
+      - mqtt-internal
+
+    volumes:
+      # Main configuration directory (read-only)
+      - ./mosquitto/config:/mosquitto/config:ro
+      # Security directory needs write access for password/ACL management
+      - ./mosquitto/config/security:/mosquitto/config/security
+      # Certificate directory (read-only; CA private key is never mounted)
+      - ./mosquitto/config/certs:/mosquitto/config/certs:ro
+      # Persistent broker data
+      - mosquitto-data:/mosquitto/data
+      # Healthcheck script
+      - ./mosquitto/scripts/healthcheck.sh:/mosquitto/scripts/healthcheck.sh:ro
+
+    healthcheck:
+      test:
+        - CMD
+        - /mosquitto/scripts/healthcheck.sh
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+    stop_grace_period: 30s
+
+networks:
+  mqtt-internal:
+    driver: bridge
+
+volumes:
+  mosquitto-data:

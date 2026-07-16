@@ -1,0 +1,141 @@
+---
+name: CI
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: ShellCheck — scripts
+        run: |
+          shellcheck --severity=warning \
+            scripts/*.sh \
+            mosquitto/scripts/healthcheck.sh \
+            tests/*.sh \
+            .github/scripts/ci-create-user.sh
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: YAML lint
+        run: |
+          yamllint \
+            -d '{extends: default, rules: {
+              line-length: {max: 120},
+              truthy: {allowed-values: ["true", "false"]}
+            }}' \
+            compose.yaml compose.console.yaml .github/workflows/ci.yml
+
+  compose-config:
+    name: Docker Compose Config
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy .env
+        run: cp .env.example .env
+
+      - name: Validate docker compose config
+        run: docker compose config
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      MQTT_INITIAL_USERNAME: ci-admin
+      MQTT_INITIAL_PASSWORD: ci-test-password
+      MQTT_SERVER_HOSTNAME: localhost
+      MQTT_TEST_PASSWORD: ci-test-password
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OpenSSL and MQTT tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y openssl mosquitto-clients
+
+      - name: Copy .env
+        run: cp .env.example .env
+
+      - name: Generate development certificates
+        run: ./scripts/generate-cert.sh --hostname localhost --ip 127.0.0.1
+
+      - name: Verify certificate generation
+        run: |
+          test -f mosquitto/config/certs/ca.crt
+          test -f mosquitto/config/certs/server.crt
+          test -f mosquitto/config/certs/server.key
+          openssl verify -CAfile mosquitto/config/certs/ca.crt mosquitto/config/certs/server.crt
+
+      - name: Create initial user
+        run: bash .github/scripts/ci-create-user.sh
+
+      - name: Validate static configuration
+        run: ./scripts/validate.sh --quick
+
+      - name: Start broker
+        run: docker compose up -d
+
+      - name: Wait for broker to become healthy
+        timeout-minutes: 3
+        run: |
+          for i in $(seq 1 36); do
+            STATUS="$(docker inspect \
+              --format '{{.State.Health.Status}}' \
+              "$(docker compose ps -q mosquitto)" 2>/dev/null || echo unknown)"
+            echo "  Healthcheck status: ${STATUS}"
+            if [ "${STATUS}" = "healthy" ]; then
+              echo "Broker is healthy."
+              break
+            fi
+            if [ "${i}" -eq 36 ]; then
+              echo "Timed out waiting for healthy status." >&2
+              docker compose logs mosquitto
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Test internal listener
+        run: bash tests/test-internal.sh
+
+      - name: Test external anonymous denied
+        run: bash tests/test-external-anonymous-denied.sh
+
+      - name: Test TLS verification
+        run: bash tests/test-tls-verification.sh
+
+      - name: Test external authentication
+        run: bash tests/test-external-auth.sh
+
+      - name: Test healthcheck
+        run: bash tests/test-healthcheck.sh
+
+      - name: Show broker logs on failure
+        if: failure()
+        run: docker compose logs mosquitto
+
+      - name: Docker cleanup
+        if: always()
+        run: docker compose down -v --remove-orphans
