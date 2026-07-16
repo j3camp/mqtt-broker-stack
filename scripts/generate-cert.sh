@@ -139,7 +139,10 @@ openssl x509 -req \
 # Install server certificate and key
 cp "${TMPDIR}/server.crt" "${CERT_DIR}/server.crt"
 cp "${TMPDIR}/server.key" "${CERT_DIR}/server.key"
-chmod 600 "${CERT_DIR}/server.key"
+# 644: world-readable so the Mosquitto process can read the key when the
+# certs directory is mounted read-only in Docker (blocking the image's
+# entrypoint chown).  The CA private key in CA_DIR keeps its 600 mode.
+chmod 644 "${CERT_DIR}/server.key"
 
 # Verify
 echo "==> Verifying certificate chain..."
