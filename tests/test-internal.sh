@@ -5,54 +5,128 @@
 set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE="docker compose"
-TEST_TOPIC="test/internal/$$"
-TIMEOUT=10
+COMPOSE_FILE="${REPO_ROOT}/compose.yaml"
+COMPOSE=(docker compose -f "${COMPOSE_FILE}")
+TEST_TOPIC="test/internal/$$-$(date +%s)"
+TEST_MESSAGE="hello-internal-$$-$(date +%s)"
+TIMEOUT="${MQTT_TEST_TIMEOUT:-10}"
 
-die() { echo "FAIL: $*" >&2; exit 1; }
-pass() { echo "PASS: $*"; }
+fail() {
+  echo "FAIL: $*" >&2
+  exit 1
+}
 
-# Load .env
+pass() {
+  echo "PASS: $*"
+}
+
+# Load repository environment variables when available.
 if [[ -f "${REPO_ROOT}/.env" ]]; then
   set -o allexport
   # shellcheck disable=SC1090
   source "${REPO_ROOT}/.env"
   set +o allexport
 fi
-MOSQUITTO_IMG="eclipse-mosquitto:${MOSQUITTO_VERSION:-2.0.21}"
-NETWORK="$(${COMPOSE} -f "${REPO_ROOT}/compose.yaml" config --format json 2>/dev/null \
-  | python3 -c "import sys,json; cfg=json.load(sys.stdin); nets=cfg.get('networks', {}); key=next(iter(nets), ''); print((nets.get(key) or {}).get('name') or key)" \
-  2>/dev/null || echo "mqtt-broker-stack_mqtt-internal")"
-BROKER_CONTAINER_ID="$(${COMPOSE} -f "${REPO_ROOT}/compose.yaml" ps -q mosquitto 2>/dev/null || true)"
-BROKER_HOST="mosquitto"
-if [[ -n "${BROKER_CONTAINER_ID}" ]]; then
-  BROKER_HOST="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${BROKER_CONTAINER_ID}" 2>/dev/null || echo "mosquitto")"
+
+MOSQUITTO_IMAGE="eclipse-mosquitto:${MOSQUITTO_VERSION:-2.0.21}"
+
+command -v docker >/dev/null 2>&1 || fail "docker is not installed"
+docker compose version >/dev/null 2>&1 || fail "docker compose is unavailable"
+[[ -f "${COMPOSE_FILE}" ]] || fail "Compose file not found: ${COMPOSE_FILE}"
+
+BROKER_CONTAINER_ID="$("${COMPOSE[@]}" ps -q mosquitto 2>/dev/null || true)"
+[[ -n "${BROKER_CONTAINER_ID}" ]] \
+  || fail "Mosquitto container is not running. Run: docker compose up -d mosquitto"
+
+RUNNING_STATE="$(docker inspect --format '{{.State.Running}}' "${BROKER_CONTAINER_ID}" 2>/dev/null || true)"
+[[ "${RUNNING_STATE}" == "true" ]] || fail "Mosquitto container is not running"
+
+# Resolve the actual Docker network attached to the Mosquitto service.
+# Prefer the network whose Compose logical name is mqtt-internal.
+NETWORK="$({
+  docker inspect --format '{{range $name, $settings := .NetworkSettings.Networks}}{{printf "%s\n" $name}}{{end}}' \
+    "${BROKER_CONTAINER_ID}"
+} | awk '/mqtt-internal$/ { print; exit }')"
+
+if [[ -z "${NETWORK}" ]]; then
+  NETWORK="$(
+    docker inspect --format '{{range $name, $settings := .NetworkSettings.Networks}}{{printf "%s\n" $name}}{{end}}' \
+      "${BROKER_CONTAINER_ID}" | head -n 1
+  )"
 fi
 
-# Verify port 1883 is not published
+[[ -n "${NETWORK}" ]] || fail "Unable to determine Mosquitto Docker network"
+
+echo "Using Docker network: ${NETWORK}"
+
+# Verify port 1883 is not published to the Docker host.
+echo ""
 echo "--- Test: port 1883 not published to host ---"
-PORT_PUBLISHED="$(${COMPOSE} -f "${REPO_ROOT}/compose.yaml" port mosquitto 1883 2>/dev/null || true)"
-if [[ -n "${PORT_PUBLISHED}" && ! "${PORT_PUBLISHED}" =~ :0$ ]]; then
-  die "Port 1883 is published to the Docker host: ${PORT_PUBLISHED}"
+PORT_PUBLISHED="$("${COMPOSE[@]}" port mosquitto 1883 2>/dev/null || true)"
+
+if [[ -n "${PORT_PUBLISHED}" ]]; then
+  fail "Port 1883 is published to the Docker host: ${PORT_PUBLISHED}"
 fi
+
 pass "Port 1883 is not published to the Docker host"
 
-# Test anonymous publish and subscribe via internal listener
+# Verify anonymous publish/subscribe from a temporary client container
+# attached to the same private Docker network.
+echo ""
 echo "--- Test: anonymous publish/subscribe on internal listener ---"
 
-RECEIVED="$(docker run --rm \
-  --network "${NETWORK}" \
-  "${MOSQUITTO_IMG}" \
-  sh -c "
-    mosquitto_sub -h '${BROKER_HOST}' -p 1883 -t '${TEST_TOPIC}' -C 1 -W ${TIMEOUT} &
-    SUB_PID=\$!
-    sleep 1
-    mosquitto_pub -h '${BROKER_HOST}' -p 1883 -t '${TEST_TOPIC}' -m 'hello-internal'
-    wait \$SUB_PID
-  " 2>/dev/null)"
+set +e
+OUTPUT="$(
+  docker run --rm \
+    --network "${NETWORK}" \
+    "${MOSQUITTO_IMAGE}" \
+    sh -eu -c '
+      broker_host="$1"
+      topic="$2"
+      message="$3"
+      timeout="$4"
+      output_file="$(mktemp)"
 
-[[ "${RECEIVED}" == "hello-internal" ]] \
-  || die "Expected 'hello-internal' but received: '${RECEIVED}'"
+      cleanup() {
+        rm -f "$output_file"
+      }
+      trap cleanup EXIT
+
+      mosquitto_sub \
+        -h "$broker_host" \
+        -p 1883 \
+        -t "$topic" \
+        -C 1 \
+        -W "$timeout" \
+        >"$output_file" &
+      subscriber_pid=$!
+
+      sleep 1
+
+      mosquitto_pub \
+        -h "$broker_host" \
+        -p 1883 \
+        -t "$topic" \
+        -m "$message"
+
+      wait "$subscriber_pid"
+      cat "$output_file"
+    ' sh mosquitto "${TEST_TOPIC}" "${TEST_MESSAGE}" "${TIMEOUT}" \
+    2>&1
+)"
+STATUS=$?
+set -e
+
+if (( STATUS != 0 )); then
+  echo "${OUTPUT}" >&2
+  fail "Anonymous publish/subscribe failed on internal listener"
+fi
+
+if [[ "${OUTPUT}" != "${TEST_MESSAGE}" ]]; then
+  printf 'MQTT client output:\n%s\n' "${OUTPUT}" >&2
+  fail "Expected '${TEST_MESSAGE}' but received different output"
+fi
+
 pass "Anonymous publish/subscribe works on internal listener (mosquitto:1883)"
 
 echo ""
