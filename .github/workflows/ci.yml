@@ -7,10 +7,15 @@ name: CI
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +45,8 @@ jobs:
   compose-config:
     name: Docker Compose Config
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -52,6 +59,8 @@ jobs:
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       MQTT_INITIAL_USERNAME: ci-admin
       MQTT_INITIAL_PASSWORD: ci-test-password
