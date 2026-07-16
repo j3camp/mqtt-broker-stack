@@ -22,11 +22,13 @@ CA_FILE="${REPO_ROOT}/mosquitto/config/certs/ca.crt"
 PASSWD_FILE="${REPO_ROOT}/mosquitto/config/security/passwords"
 
 [[ -f "${CA_FILE}" ]] || die "CA certificate not found: ${CA_FILE}."
-[[ -f "${PASSWD_FILE}" ]] || die "Password file not found: ${PASSWD_FILE}."
 
-TEST_USER="$(cut -d: -f1 "${PASSWD_FILE}" | head -1)"
+TEST_USER="${MQTT_INITIAL_USERNAME:-admin}"
 TEST_PASS="${MQTT_TEST_PASSWORD:-}"
 if [[ -z "${TEST_PASS}" ]]; then
+  if [[ -r "${PASSWD_FILE}" ]]; then
+    TEST_USER="$(cut -d: -f1 "${PASSWD_FILE}" | head -1)"
+  fi
   read -rsp "Password for '${TEST_USER}': " TEST_PASS; echo
 fi
 

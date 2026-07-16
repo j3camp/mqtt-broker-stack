@@ -26,8 +26,12 @@ PASSWD_FILE="${REPO_ROOT}/mosquitto/config/security/passwords"
 [[ -f "${CA_FILE}" ]] || die "CA certificate not found: ${CA_FILE}. Run ./scripts/init.sh first."
 [[ -f "${PASSWD_FILE}" ]] || die "Password file not found: ${PASSWD_FILE}. Run ./scripts/init.sh first."
 
-# Read first user from password file for test
-TEST_USER="$(cut -d: -f1 "${PASSWD_FILE}" | head -1)"
+# Prefer configured initial username. Fall back to password file if readable.
+TEST_USER="${MQTT_INITIAL_USERNAME:-}"
+if [[ -z "${TEST_USER}" ]]; then
+  [[ -r "${PASSWD_FILE}" ]] || die "Password file is not readable and MQTT_INITIAL_USERNAME is not set."
+  TEST_USER="$(cut -d: -f1 "${PASSWD_FILE}" | head -1)"
+fi
 [[ -n "${TEST_USER}" ]] || die "No users found in password file."
 
 # External test password — passed via env var

@@ -21,8 +21,13 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
 fi
 MOSQUITTO_IMG="eclipse-mosquitto:${MOSQUITTO_VERSION:-2.0.21}"
 NETWORK="$(${COMPOSE} -f "${REPO_ROOT}/compose.yaml" config --format json 2>/dev/null \
-  | python3 -c "import sys,json; cfg=json.load(sys.stdin); print(list(cfg['networks'].keys())[0])" \
+  | python3 -c "import sys,json; cfg=json.load(sys.stdin); nets=cfg.get('networks', {}); key=next(iter(nets), ''); print((nets.get(key) or {}).get('name') or key)" \
   2>/dev/null || echo "mqtt-broker-stack_mqtt-internal")"
+BROKER_CONTAINER_ID="$(${COMPOSE} -f "${REPO_ROOT}/compose.yaml" ps -q mosquitto 2>/dev/null || true)"
+BROKER_HOST="mosquitto"
+if [[ -n "${BROKER_CONTAINER_ID}" ]]; then
+  BROKER_HOST="$(docker inspect --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${BROKER_CONTAINER_ID}" 2>/dev/null || echo "mosquitto")"
+fi
 
 # Verify port 1883 is not published
 echo "--- Test: port 1883 not published to host ---"
@@ -39,10 +44,10 @@ RECEIVED="$(docker run --rm \
   --network "${NETWORK}" \
   "${MOSQUITTO_IMG}" \
   sh -c "
-    mosquitto_sub -h mosquitto -p 1883 -t '${TEST_TOPIC}' -C 1 -W ${TIMEOUT} &
+    mosquitto_sub -h '${BROKER_HOST}' -p 1883 -t '${TEST_TOPIC}' -C 1 -W ${TIMEOUT} &
     SUB_PID=\$!
     sleep 1
-    mosquitto_pub -h mosquitto -p 1883 -t '${TEST_TOPIC}' -m 'hello-internal'
+    mosquitto_pub -h '${BROKER_HOST}' -p 1883 -t '${TEST_TOPIC}' -m 'hello-internal'
     wait \$SUB_PID
   " 2>/dev/null)"
 
