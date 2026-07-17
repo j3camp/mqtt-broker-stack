@@ -15,6 +15,7 @@ flowchart LR
 
 - `mqtt-internal`：internal Docker bridge，只給可信任應用服務。1883 未發布到主機。
 - `mqtt-control`：獨立 internal bridge，broker 固定使用 `172.31.0.2`。只有 `dynsec-admin` 工具容器加入，1884 未發布到主機。
+- `mqtt-edge`：只有 broker 加入的非 internal bridge，提供 Docker published ports 所需的 edge 路徑；一般應用與管理工具不加入。
 - 外部 MQTTS 透過可設定 bind address 的 8883 發布。
 - WSS 9001 預設只綁 `127.0.0.1`，需要反向代理時仍應維持 TLS 與來源控管。
 

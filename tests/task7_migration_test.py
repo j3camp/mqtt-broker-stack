@@ -120,6 +120,8 @@ class Task7ArchitectureContractTest(unittest.TestCase):
     def test_compose_isolates_control_network_and_ports(self) -> None:
         compose = read("compose.yaml")
         self.assertIn("mqtt-control:", compose)
+        self.assertGreaterEqual(compose.count("mqtt-edge:"), 2)
+        self.assertIn("  mqtt-edge:\n    driver: bridge\n", compose)
         self.assertIn("ipv4_address: 172.31.0.2", compose)
         self.assertRegex(compose, r"(?ms)mqtt-control:.*?internal: true")
         self.assertIn("dynsec-admin:", compose)
