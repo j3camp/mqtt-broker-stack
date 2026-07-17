@@ -193,6 +193,11 @@ class Task7ArchitectureContractTest(unittest.TestCase):
         self.assertIn("Verify return code: 0", tls_test)
         self.assertNotIn('grep -c "Verify return code: 0"', tls_test)
 
+        acl_test = read("tests/test-acl.sh")
+        self.assertIn("mqtt-internal", acl_test)
+        self.assertIn("mosquitto_sub", acl_test)
+        self.assertIn("if wait", acl_test)
+
 
 class DynSecMigrationUnitTest(unittest.TestCase):
     def setUp(self) -> None:

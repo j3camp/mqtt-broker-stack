@@ -5,6 +5,7 @@ set -Eeuo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROLE="ci-matrix-role-$$"
 GROUP="ci-matrix-group-$$"
+TMPDIR="$(mktemp -d)"
 
 die() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "PASS: $*"; }
@@ -22,11 +23,18 @@ CA_FILE="${REPO_ROOT}/mosquitto/config/certs/ca.crt"
 USERNAME="${MQTT_TEST_USERNAME:?MQTT_TEST_USERNAME is required}"
 PASSWORD="${MQTT_TEST_PASSWORD:?MQTT_TEST_PASSWORD is required}"
 AUTH=(--cafile "${CA_FILE}" -h "${HOST}" -p "${PORT}" -V 5 -u "${USERNAME}" -P "${PASSWORD}")
+BROKER_ID="$(docker compose -f "${REPO_ROOT}/compose.yaml" ps -q mosquitto)"
+[[ -n "${BROKER_ID}" ]] || die "Mosquitto is not running."
+INTERNAL_NETWORK="$(docker inspect \
+  --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
+  "${BROKER_ID}" | grep 'mqtt-internal' | head -1)"
+[[ -n "${INTERNAL_NETWORK}" ]] || die "Could not determine mqtt-internal network."
 
 cleanup() {
   "${REPO_ROOT}/scripts/dynsec-command.sh" removeGroupClient "${GROUP}" "${USERNAME}" >/dev/null 2>&1 || true
   "${REPO_ROOT}/scripts/dynsec-command.sh" deleteGroup "${GROUP}" >/dev/null 2>&1 || true
   "${REPO_ROOT}/scripts/dynsec-command.sh" deleteRole "${ROLE}" >/dev/null 2>&1 || true
+  rm -rf "${TMPDIR}"
 }
 trap cleanup EXIT
 
@@ -36,8 +44,16 @@ publish_allowed() {
 }
 
 publish_denied() {
-  if mosquitto_pub "${AUTH[@]}" -q 1 -t "$1" -m denied >/dev/null 2>&1; then
-    die "Expected publish deny for $1"
+  local topic="$1"
+  local output="${TMPDIR}/denied-message"
+  docker run --rm --network "${INTERNAL_NETWORK}" \
+    --entrypoint mosquitto_sub "${MOSQUITTO_IMAGE:?MOSQUITTO_IMAGE is required}" \
+    -h mosquitto -p 1883 -t "${topic}" -C 1 -W 2 >"${output}" 2>/dev/null &
+  local observer_pid=$!
+  sleep 0.5
+  mosquitto_pub "${AUTH[@]}" -q 1 -t "${topic}" -m denied >/dev/null 2>&1 || true
+  if wait "${observer_pid}"; then
+    die "Expected publish deny for ${topic}; internal observer received the message."
   fi
 }
 
