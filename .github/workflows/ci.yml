@@ -40,7 +40,13 @@ jobs:
               line-length: {max: 120},
               truthy: {allowed-values: ["true", "false"]}
             }}' \
-            compose.yaml compose.console.yaml .github/workflows/ci.yml
+            compose.yaml compose.console.yaml \
+            docs/admin-console/poc/eclipse-mosquitto-dashboard/compose.yaml \
+            docs/admin-console/poc/mqttctl/compose.yaml \
+            .github/workflows/ci.yml
+
+      - name: Validate administration architecture decision
+        run: bash tests/test-admin-console-architecture.sh
 
   compose-config:
     name: Docker Compose Config

@@ -122,6 +122,7 @@ make test
 - [Security](docs/security.md)
 - [Configuration](docs/configuration.md)
 - [Operations](docs/operations.md)
+- [MQTT Administration Console Decision](docs/admin-console/README.md)
 
 ## Production Checklist
 

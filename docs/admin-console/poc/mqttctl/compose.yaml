@@ -1,0 +1,52 @@
+services:
+  mqttctl:
+    build:
+      context: https://github.com/Slyke/mqttctl.git#9231e01e8b159957c777e0749b8c8e4d48c69b55
+      dockerfile: dockerfiles/mqttctl.Dockerfile
+    image: mqtt-admin-evaluation/mqttctl:9231e01
+    depends_on:
+      - broker-agent
+    environment:
+      PORT: "3000"
+      HOST: "0.0.0.0"
+      ORIGIN: "http://127.0.0.1:${MQTTCTL_PORT:-13000}"
+      MQTTCTL_CONFIG_PATH: /app/config/mqttctl.config.json5
+      MQTTCTL_SECRETS_PATH: /app/config/mqttctl.secrets.json5
+      MQTTCTL_DB_KIND: sqlite
+      MQTTCTL_SQLITE_PATH: /app/data/mqttctl.sqlite
+      MQTTCTL_LOG_CONSOLE_FORMAT: text
+    volumes:
+      - ./config/mqttctl.config.json5:/app/config/mqttctl.config.json5:ro
+      - ./config/mqttctl.secrets.json5:/app/config/mqttctl.secrets.json5:ro
+      - app-data:/app/data
+    ports:
+      - "127.0.0.1:${MQTTCTL_PORT:-13000}:3000"
+    networks:
+      - evaluation
+    security_opt:
+      - no-new-privileges:true
+
+  broker-agent:
+    build:
+      context: https://github.com/Slyke/mqttctl.git#9231e01e8b159957c777e0749b8c8e4d48c69b55
+      dockerfile: dockerfiles/broker-agent.Dockerfile
+    image: mqtt-admin-evaluation/mqttctl-broker-agent:9231e01
+    environment:
+      MQTTCTL_BROKER_AGENT_CONFIG_PATH: /etc/mqttctl/broker-agent.config.json
+      MQTTCTL_LOG_CONSOLE_FORMAT: text
+    volumes:
+      - ./config/broker-agent.config.json:/etc/mqttctl/broker-agent.config.json:ro
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - broker-data:/mosquitto/data
+    networks:
+      - evaluation
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  app-data:
+  broker-data:
+
+networks:
+  evaluation:
+    internal: true
