@@ -198,6 +198,12 @@ class Task7ArchitectureContractTest(unittest.TestCase):
         self.assertIn("mosquitto_sub", acl_test)
         self.assertIn("if wait", acl_test)
 
+        control_test = read("tests/test-control-isolation.sh")
+        self.assertIn("CANARY_TOPIC", control_test)
+        self.assertIn("mosquitto_sub", control_test)
+        self.assertIn("-C 2", control_test)
+        self.assertIn("grep -Fqx", control_test)
+
 
 class DynSecMigrationUnitTest(unittest.TestCase):
     def setUp(self) -> None:
