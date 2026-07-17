@@ -179,6 +179,10 @@ class Task7ArchitectureContractTest(unittest.TestCase):
         self.assertIn("chown", installer)
         self.assertIn("dynsec-admin-password", gitignore)
 
+        ci_user_helper = read(".github/scripts/ci-create-user.sh")
+        self.assertIn("awk -F ':'", ci_user_helper)
+        self.assertIn("$1 == user", ci_user_helper)
+
 
 class DynSecMigrationUnitTest(unittest.TestCase):
     def setUp(self) -> None:

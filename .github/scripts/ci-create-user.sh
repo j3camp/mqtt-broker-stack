@@ -22,6 +22,7 @@ printf '%s' "${MQTT_CREDENTIAL}" | docker run --rm -i \
   --entrypoint sh \
   "${MOSQUITTO_IMG}" \
   -c 'read -r cred; mosquitto_passwd -b -c /tmp/pw "${MQTT_USER}" "${cred}"; cat /tmp/pw' \
+  | awk -F ':' -v user="${MQTT_USER}" '$1 == user { print; found=1 } END { if (!found) exit 1 }' \
   > "${PASSWD_FILE}"
 
 chmod 600 "${PASSWD_FILE}"
