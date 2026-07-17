@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>MQTT Broker Control</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/actions.css">
+</head>
+<body>
+  <section id="login-view" class="login-layout hidden">
+    <div class="login-brand">
+      <div class="brand-mark">MQ</div>
+      <p class="eyebrow">OPERATIONS CONTROL PLANE</p>
+      <h1>把 broker 狀態與存取權，放在同一個可信任的視野裡。</h1>
+      <p>Operator 身分與 MQTT client 完全分離。每次敏感操作都會經過伺服器端授權，並留下可驗證的稽核軌跡。</p>
+      <div class="trust-line"><span></span> Isolated control listener <span></span> Server-side RBAC <span></span> Tamper-evident audit</div>
+    </div>
+    <div class="login-panel">
+      <div>
+        <p class="eyebrow">BROKER ADMINISTRATION</p>
+        <h2>登入控制台</h2>
+        <p class="muted">請使用平台管理者身分繼續。</p>
+      </div>
+      <form id="login-form" class="form-stack">
+        <label>帳號<input name="username" autocomplete="username" required></label>
+        <label>密碼<input name="password" type="password" autocomplete="current-password" required></label>
+        <p id="login-error" class="error hidden"></p>
+        <button class="button primary wide" type="submit">登入</button>
+      </form>
+      <div id="oidc-wrap" class="hidden">
+        <div class="divider"><span>或</span></div>
+        <a class="button secondary wide" href="/api/v1/auth/oidc/login">使用組織 SSO</a>
+      </div>
+    </div>
+  </section>
+
+  <div id="app-shell" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="logo"><div class="brand-mark small">MQ</div><div><strong>Broker Control</strong><span>Administration</span></div></div>
+      <nav>
+        <button class="nav-item active" data-view="overview"><span>01</span>總覽</button>
+        <button class="nav-item" data-view="clients"><span>02</span>MQTT Clients</button>
+        <button class="nav-item" data-view="policies"><span>03</span>Roles 與 ACL</button>
+        <button class="nav-item" data-view="connections"><span>04</span>連線狀態</button>
+        <button class="nav-item" data-view="audit"><span>05</span>稽核歷程</button>
+      </nav>
+      <div class="sidebar-foot"><span class="pulse"></span><div><strong>Control plane</strong><small>mqtt-control:1884</small></div></div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div><p class="eyebrow" id="view-kicker">BROKER STATUS</p><h1 id="view-title">系統總覽</h1></div>
+        <div class="operator"><div><strong id="operator-name"></strong><span id="operator-role"></span></div><button id="logout" class="button ghost">登出</button></div>
+      </header>
+      <div id="global-error" class="banner error hidden"></div>
+
+      <section id="view-overview" class="view active">
+        <div id="overview-cards" class="metric-grid skeleton-grid"></div>
+        <div class="content-grid">
+          <article class="panel span-2"><div class="panel-head"><div><p class="eyebrow">LISTENER POLICIES</p><h2>網路邊界</h2></div><span class="tag">4 listeners</span></div><div id="listeners" class="listener-list"></div></article>
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">TLS CERTIFICATE</p><h2>憑證狀態</h2></div></div><div id="certificate-detail"></div></article>
+        </div>
+      </section>
+
+      <section id="view-clients" class="view">
+        <div class="toolbar"><div class="search"><input id="client-search" placeholder="搜尋 username 或 client ID"><button id="search-clients" class="button secondary">搜尋</button></div><button id="create-client" class="button primary">新增 Client</button></div>
+        <article class="panel table-panel"><div class="panel-head"><div><p class="eyebrow">DYNAMIC SECURITY</p><h2>Client identities</h2></div><span id="client-count" class="tag"></span></div><div class="table-wrap"><table><thead><tr><th>Username</th><th>Client ID</th><th>狀態</th><th>Roles / Groups</th><th>連線</th><th></th></tr></thead><tbody id="clients-body"></tbody></table></div></article>
+      </section>
+
+      <section id="view-policies" class="view">
+        <div class="policy-grid">
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">REUSABLE ACCESS</p><h2>Roles 與 ACL</h2></div><button id="create-role" class="button secondary">新增 Role</button></div><div id="role-list" class="object-list"></div></article>
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">INHERITANCE</p><h2>Groups</h2></div><button id="create-group" class="button secondary">新增 Group</button></div><div id="group-list" class="object-list"></div></article>
+        </div>
+        <article class="panel simulator"><div class="panel-head"><div><p class="eyebrow">EFFECTIVE PERMISSIONS</p><h2>存取權模擬器</h2></div></div><form id="permission-form" class="inline-form"><label>Username<input name="username" required></label><label>Client ID<input name="clientid"></label><label>Topic<input name="topic" placeholder="devices/alpha/telemetry" required></label><label>Action<select name="action"><option>publishClientSend</option><option>publishClientReceive</option><option>subscribeLiteral</option><option>subscribePattern</option><option>unsubscribeLiteral</option><option>unsubscribePattern</option></select></label><button class="button primary" type="submit">模擬</button></form><div id="permission-result" class="decision empty">輸入條件後，這裡會顯示最終決策與匹配規則。</div></article>
+      </section>
+
+      <section id="view-connections" class="view">
+        <article class="panel table-panel"><div class="panel-head"><div><p class="eyebrow">LIVE STATE</p><h2>Client 連線狀態</h2><p id="connection-source" class="muted"></p></div><button id="refresh-connections" class="button secondary">重新整理</button></div><div class="table-wrap"><table><thead><tr><th>Username</th><th>Client ID</th><th>狀態</th><th>Listener / Address</th><th>最後活動</th></tr></thead><tbody id="connections-body"></tbody></table></div></article>
+      </section>
+
+      <section id="view-audit" class="view">
+        <div class="toolbar"><div class="search"><input id="audit-search" placeholder="搜尋 actor、target 或 correlation ID"><button id="search-audit" class="button secondary">篩選</button></div><div id="audit-export-actions"><a class="button secondary" href="/api/v1/audit/export?format=csv">匯出 CSV</a><a class="button primary" href="/api/v1/audit/export?format=jsonl">匯出 JSONL</a></div></div>
+        <article class="panel table-panel"><div class="panel-head"><div><p class="eyebrow">APPEND-ONLY HISTORY</p><h2>稽核事件</h2></div><span id="chain-status" class="tag"></span></div><div class="table-wrap"><table><thead><tr><th># / 時間</th><th>Actor</th><th>Action</th><th>Target</th><th>結果</th><th>Correlation ID</th></tr></thead><tbody id="audit-body"></tbody></table></div></article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="modal"><form method="dialog" id="modal-form"><div class="modal-head"><div><p class="eyebrow" id="modal-kicker">ADMIN ACTION</p><h2 id="modal-title"></h2></div><button value="cancel" class="close" aria-label="關閉">×</button></div><div id="modal-fields" class="form-stack"></div><p id="modal-error" class="error hidden"></p><div class="modal-actions"><button value="cancel" class="button ghost">取消</button><button id="modal-submit" value="default" class="button primary">確認</button></div></form></dialog>
+  <div id="toast" class="toast hidden"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

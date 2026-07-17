@@ -1,0 +1,12 @@
+.acl {
+  grid-template-columns: 1.3fr 1.5fr .5fr .4fr auto;
+  align-items: center;
+}
+
+.acl button {
+  border: 0;
+  background: transparent;
+  color: var(--red);
+  cursor: pointer;
+  font-size: .65rem;
+}
