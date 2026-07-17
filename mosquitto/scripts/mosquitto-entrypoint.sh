@@ -15,4 +15,8 @@ cp "${SOURCE}" "${TARGET}"
 chown mosquitto:mosquitto "${TARGET}"
 chmod 400 "${TARGET}"
 
+if [ "$#" -eq 0 ]; then
+  set -- /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf
+fi
+
 exec /docker-entrypoint.sh "$@"
