@@ -129,6 +129,8 @@ class Task7ArchitectureContractTest(unittest.TestCase):
         self.assertNotRegex(compose, r"(?m)^\s*-\s*[\"']?[^\n]*:(?:1883|1884)(?:[\"']?\s*$)")
         self.assertRegex(compose, r"127\.0\.0\.1:\$\{MQTT_WSS_PORT:-9001\}:9001")
         self.assertNotIn("/var/run/docker.sock", compose)
+        self.assertEqual(2, compose.count("DAC_READ_SEARCH"))
+        self.assertNotIn("DAC_OVERRIDE", compose)
         self.assertIn("/mosquitto/scripts/mosquitto-entrypoint.sh", compose)
         self.assertIn("/usr/sbin/mosquitto", compose)
         broker_entrypoint = read("mosquitto/scripts/mosquitto-entrypoint.sh")

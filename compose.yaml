@@ -63,6 +63,8 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - DAC_READ_SEARCH
 
   dynsec-bootstrap:
     image: ${MOSQUITTO_IMAGE}
@@ -89,6 +91,8 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    cap_add:
+      - DAC_READ_SEARCH
 
   dynsec-migration:
     image: ${MOSQUITTO_IMAGE}
