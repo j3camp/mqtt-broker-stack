@@ -9,7 +9,7 @@ OWNERS_FILE="${REPO_ROOT}/mosquitto/config/security/migration-owners.csv"
 CHECKPOINT_ROOT="${REPO_ROOT}/backups"
 WORK_DIR="${REPO_ROOT}/tmp/dynsec"
 COMPOSE=(docker compose -f "${REPO_ROOT}/compose.yaml")
-CUTOVER_STARTED=false
+RESTORE_REQUIRED=false
 CHECKPOINT_DIR=""
 
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -55,11 +55,6 @@ fi
 BROKER_ID="$("${COMPOSE[@]}" ps -q mosquitto)"
 [[ -n "${BROKER_ID}" ]] || die "Mosquitto must be running before migration."
 
-# Make the pre-cutover checkpoint safe even if the operator started only the
-# broker service and the normal one-shot bootstrap service did not run.
-"${COMPOSE[@]}" run --rm --no-deps \
-  --entrypoint /mosquitto/scripts/harden-dynsec.sh dynsec-admin >/dev/null
-
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$1" | awk '{print $1}'
@@ -81,8 +76,8 @@ wait_for_health() {
 rollback_on_error() {
   local status=$?
   trap - ERR
-  if [[ "${CUTOVER_STARTED}" == "true" && -n "${CHECKPOINT_DIR}" ]]; then
-    echo "ERROR: Migration failed after cutover; starting rollback." >&2
+  if [[ "${RESTORE_REQUIRED}" == "true" && -n "${CHECKPOINT_DIR}" ]]; then
+    echo "ERROR: Migration failed after checkpoint; starting rollback." >&2
     "${REPO_ROOT}/scripts/rollback-dynsec.sh" \
       --checkpoint "${CHECKPOINT_DIR}" --no-confirm \
       || echo "ERROR: Automatic rollback failed; use ${CHECKPOINT_DIR} manually." >&2
@@ -106,7 +101,13 @@ printf '%s  %s\n' "${STATE_SHA256}" "dynamic-security.json" \
   > "${CHECKPOINT_DIR}/sha256"
 printf '%s\n' "${CHECKPOINT_DIR}" > "${CHECKPOINT_ROOT}/.last-dynsec-migration"
 
-cp "${CHECKPOINT_DIR}/dynamic-security.json" "${WORK_DIR}/base.json"
+# Preserve the original bytes before hardening mutates the live state. Any
+# failure after this point must restore the checkpoint, even before cutover.
+RESTORE_REQUIRED=true
+"${COMPOSE[@]}" run --rm --no-deps \
+  --entrypoint /mosquitto/scripts/harden-dynsec.sh dynsec-admin >/dev/null
+docker cp "${BROKER_ID}:/mosquitto/data/dynamic-security.json" \
+  "${WORK_DIR}/base.json"
 MIGRATION_ARGS=(
   --password-file "${PASSWORD_FILE}"
   --owners-file "${OWNERS_FILE}"
@@ -117,7 +118,6 @@ MIGRATION_ARGS=(
 python3 "${REPO_ROOT}/scripts/migrate_dynsec.py" "${MIGRATION_ARGS[@]}"
 python3 -m json.tool "${WORK_DIR}/candidate.json" >/dev/null
 
-CUTOVER_STARTED=true
 info "Stopping broker for atomic Dynamic Security state replacement."
 "${COMPOSE[@]}" stop mosquitto
 "${COMPOSE[@]}" --profile migration run --rm dynsec-migration candidate.json
@@ -133,6 +133,6 @@ if [[ "${DYNSEC_MIGRATION_FAIL_AFTER_CUTOVER:-0}" == "1" ]]; then
 fi
 
 "${REPO_ROOT}/scripts/dynsec-command.sh" listClients >/dev/null
-CUTOVER_STARTED=false
+RESTORE_REQUIRED=false
 trap - ERR
 info "Migration completed. Rollback checkpoint: ${CHECKPOINT_DIR}"

@@ -176,6 +176,19 @@ class Task7ArchitectureContractTest(unittest.TestCase):
             "sha256",
         ):
             self.assertIn(token, migration)
+        checkpoint_at = migration.index('info "Creating migration rollback checkpoint')
+        hardening_at = migration.index("--entrypoint /mosquitto/scripts/harden-dynsec.sh")
+        self.assertLess(checkpoint_at, hardening_at)
+        self.assertIn("RESTORE_REQUIRED=true", migration)
+        self.assertIn(
+            'docker cp "${BROKER_ID}:/mosquitto/data/dynamic-security.json" \\\n'
+            '  "${WORK_DIR}/base.json"',
+            migration,
+        )
+        self.assertNotIn(
+            'cp "${CHECKPOINT_DIR}/dynamic-security.json" "${WORK_DIR}/base.json"',
+            migration,
+        )
         self.assertIn("dynamic-security.json", rollback)
         self.assertIn("mv", installer)
         self.assertIn("chown", installer)
