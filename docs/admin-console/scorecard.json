@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "evaluated_on": "2026-07-17",
+  "scale": {
+    "minimum": 0,
+    "maximum": 5,
+    "definitions": {
+      "0": "沒有此能力，或存在淘汰性阻礙",
+      "1": "存在重大缺口，或實作尚未獲得驗證",
+      "2": "僅部分具備，仍需大量補強",
+      "3": "符合最低要求，且限制已釐清",
+      "4": "高度符合，只需少量調整",
+      "5": "直接符合，且有充分的一手證據"
+    }
+  },
+  "decision": {
+    "selected_candidate_id": "custom-hybrid",
+    "minimum_required_score": 3,
+    "review_on": "2026-10-17",
+    "rule": "所有必要條件均達 3 分才符合資格；符合資格者再依加權總分排序。"
+  },
+  "criteria": [
+    {"id": "security-boundaries", "name": "安全邊界", "classification": "required", "weight": 14, "evidence_requirement": "驗證最小權限、祕密隔離、瀏覽器不持有管理憑證，且不掛載 Docker socket。"},
+    {"id": "dynamic-security", "name": "Mosquitto Dynamic Security", "classification": "required", "weight": 12, "evidence_requirement": "驗證 client、group、role、ACL 與執行期控制。"},
+    {"id": "operator-auth-rbac", "name": "後台登入與 RBAC", "classification": "required", "weight": 10, "evidence_requirement": "驗證伺服器端人員身分驗證、OIDC 與操作角色。"},
+    {"id": "auditability", "name": "稽核能力", "classification": "required", "weight": 8, "evidence_requirement": "驗證可歸屬、去敏且僅可附加的管理事件。"},
+    {"id": "effective-permissions", "name": "有效權限分析", "classification": "required", "weight": 7, "evidence_requirement": "驗證角色、群組、優先序與萬用字元合併後的允許或拒絕結果。"},
+    {"id": "deployment-fit", "name": "部署相容性", "classification": "required", "weight": 9, "evidence_requirement": "驗證 Docker Compose、Mosquitto 2.1 與分離 listener 信任邊界的相容性。"},
+    {"id": "license", "name": "開源授權", "classification": "required", "weight": 8, "evidence_requirement": "從原始碼儲存庫確認明確且經 OSI 認可的授權。"},
+    {"id": "observability", "name": "指標與日誌", "classification": "preferred", "weight": 7, "evidence_requirement": "驗證或可乾淨整合 Prometheus、Grafana 與集中式日誌。"},
+    {"id": "topic-explorer", "name": "受限 Topic Explorer", "classification": "preferred", "weight": 5, "evidence_requirement": "驗證具最小權限限制的 publish／subscribe 診斷。"},
+    {"id": "operations", "name": "維運流程", "classification": "preferred", "weight": 6, "evidence_requirement": "驗證設定、憑證、快照、備份、還原與回復邊界。"},
+    {"id": "maturity-maintenance", "name": "成熟度與維護性", "classification": "preferred", "weight": 8, "evidence_requirement": "確認儲存庫歷史、版本、支援執行環境與近期維護狀態。"},
+    {"id": "delivery-cost", "name": "交付成本", "classification": "preferred", "weight": 6, "evidence_requirement": "估算整合、補強與長期維護成本。"}
+  ],
+  "candidates": [
+    {
+      "id": "eclipse-mosquitto-dashboard",
+      "name": "Eclipse Mosquitto Dashboard",
+      "license": {
+        "spdx": "EPL-2.0 OR BSD-3-Clause",
+        "source": "https://github.com/eclipse-mosquitto/mosquitto/blob/7b8aba105b77253309de24664bbae69d0cae3da0/LICENSE.txt"
+      },
+      "source": {
+        "repository": "https://github.com/eclipse-mosquitto/mosquitto",
+        "commit": "7b8aba105b77253309de24664bbae69d0cae3da0"
+      },
+      "scores": {
+        "security-boundaries": {"score": 3, "status": "partial", "evidence": "Dashboard 為同源唯讀靜態介面，PoC 僅綁定 loopback 且不使用管理憑證；官方範例尚未提供後台身分驗證。", "sources": ["https://github.com/eclipse-mosquitto/mosquitto/blob/7b8aba105b77253309de24664bbae69d0cae3da0/dashboard/README.md", "https://mosquitto.org/man/mosquitto-conf-5.html"]},
+        "dynamic-security": {"score": 0, "status": "verified", "evidence": "介面只呼叫 systree 與 listeners API，沒有 Dynamic Security 管理功能。", "sources": ["https://github.com/eclipse-mosquitto/mosquitto/blob/7b8aba105b77253309de24664bbae69d0cae3da0/dashboard/src/app/consts.js"]},
+        "operator-auth-rbac": {"score": 0, "status": "verified", "evidence": "靜態 Dashboard 未實作 OIDC、工作階段或操作人員角色。", "sources": ["https://github.com/eclipse-mosquitto/mosquitto/tree/7b8aba105b77253309de24664bbae69d0cae3da0/dashboard"]},
+        "auditability": {"score": 0, "status": "verified", "evidence": "介面沒有管理變更，也沒有可歸屬的後台稽核事件。", "sources": ["https://github.com/eclipse-mosquitto/mosquitto/tree/7b8aba105b77253309de24664bbae69d0cae3da0/dashboard"]},
+        "effective-permissions": {"score": 0, "status": "verified", "evidence": "沒有 ACL 編輯或有效權限模擬器。", "sources": ["https://github.com/eclipse-mosquitto/mosquitto/tree/7b8aba105b77253309de24664bbae69d0cae3da0/dashboard"]},
+        "deployment-fit": {"score": 4, "status": "verified", "evidence": "Mosquitto 2.1 原生 http_api listener 可同時提供 API 與 http_dir 靜態內容，容易加入現有 Compose。", "sources": ["https://mosquitto.org/man/mosquitto-conf-5.html", "https://github.com/eclipse-mosquitto/mosquitto/blob/7b8aba105b77253309de24664bbae69d0cae3da0/dashboard/README.md"]},
+        "license": {"score": 5, "status": "verified", "evidence": "官方儲存庫採 EPL-2.0 或 BSD-3-Clause 雙授權。", "sources": ["https://github.com/eclipse-mosquitto/mosquitto/blob/7b8aba105b77253309de24664bbae69d0cae3da0/LICENSE.txt"]},
+        "observability": {"score": 4, "status": "verified", "evidence": "提供 broker、client、message 與 listener 的唯讀圖表，但沒有 Prometheus 與集中式日誌整合。", "sources": ["https://github.com/eclipse-mosquitto/mosquitto/blob/7b8aba105b77253309de24664bbae69d0cae3da0/dashboard/src/index.html"]},
+        "topic-explorer": {"score": 0, "status": "verified", "evidence": "沒有 MQTT publish／subscribe 探索工具。", "sources": ["https://github.com/eclipse-mosquitto/mosquitto/tree/7b8aba105b77253309de24664bbae69d0cae3da0/dashboard"]},
+        "operations": {"score": 1, "status": "partial", "evidence": "可檢視 listeners，但沒有設定、憑證、備份或回復工作流程。", "sources": ["https://github.com/eclipse-mosquitto/mosquitto/blob/7b8aba105b77253309de24664bbae69d0cae3da0/dashboard/src/listeners.html"]},
+        "maturity-maintenance": {"score": 2, "status": "partial", "evidence": "Mosquitto 專案成熟且持續維護，但 Dashboard 仍只有簡短開發說明，沒有獨立版本或正式部署文件。", "sources": ["https://github.com/eclipse-mosquitto/mosquitto/commits/7b8aba105b77253309de24664bbae69d0cae3da0", "https://github.com/eclipse-mosquitto/mosquitto/blob/7b8aba105b77253309de24664bbae69d0cae3da0/dashboard/README.md"]},
+        "delivery-cost": {"score": 2, "status": "partial", "evidence": "唯讀監控導入成本低，但補齊所有必要管理功能仍等同自行開發控制平面。", "sources": ["https://github.com/eclipse-mosquitto/mosquitto/tree/7b8aba105b77253309de24664bbae69d0cae3da0/dashboard"]}
+      }
+    },
+    {
+      "id": "mqttctl",
+      "name": "MqttCtl",
+      "license": {"spdx": "MIT", "source": "https://github.com/Slyke/mqttctl/blob/9231e01e8b159957c777e0749b8c8e4d48c69b55/LICENSE.md"},
+      "source": {"repository": "https://github.com/Slyke/mqttctl", "commit": "9231e01e8b159957c777e0749b8c8e4d48c69b55"},
+      "scores": {
+        "security-boundaries": {"score": 3, "status": "partial", "evidence": "控制平面與 broker agent 分離且禁止下載私鑰；範例仍使用 HTTP 與 CHANGE_ME 祕密，必須補強。", "sources": ["https://github.com/Slyke/mqttctl/blob/9231e01e8b159957c777e0749b8c8e4d48c69b55/README.md"]},
+        "dynamic-security": {"score": 5, "status": "verified", "evidence": "支援 DynSec client、group、role 與 ACL 管理。", "sources": ["https://github.com/Slyke/mqttctl/blob/9231e01e8b159957c777e0749b8c8e4d48c69b55/README.md"]},
+        "operator-auth-rbac": {"score": 5, "status": "verified", "evidence": "文件列出 local、OIDC、trusted-header 登入與伺服器端 RBAC。", "sources": ["https://github.com/Slyke/mqttctl/blob/9231e01e8b159957c777e0749b8c8e4d48c69b55/README.md"]},
+        "auditability": {"score": 5, "status": "verified", "evidence": "具僅可附加且以 SHA-256 串鏈的稽核紀錄。", "sources": ["https://github.com/Slyke/mqttctl/blob/9231e01e8b159957c777e0749b8c8e4d48c69b55/README.md"]},
+        "effective-permissions": {"score": 5, "status": "verified", "evidence": "具有效權限檢視，可合併 client、group、role 與 ACL。", "sources": ["https://github.com/Slyke/mqttctl/blob/9231e01e8b159957c777e0749b8c8e4d48c69b55/README.md"]},
+        "deployment-fit": {"score": 2, "status": "partial", "evidence": "Compose 範例會建立自己的 Mosquitto 2.0.21 與 broker agent，尚未驗證現有 Mosquitto 2.1 分離 listener 架構。", "sources": ["https://github.com/Slyke/mqttctl/blob/9231e01e8b159957c777e0749b8c8e4d48c69b55/docker-compose.yml"]},
+        "license": {"score": 5, "status": "verified", "evidence": "儲存庫包含 MIT 授權。", "sources": ["https://github.com/Slyke/mqttctl/blob/9231e01e8b159957c777e0749b8c8e4d48c69b55/LICENSE.md"]},
+        "observability": {"score": 2, "status": "partial", "evidence": "具 dashboard，但未證實 Prometheus、Grafana 與 Loki 的第一級整合。", "sources": ["https://github.com/Slyke/mqttctl/blob/9231e01e8b159957c777e0749b8c8e4d48c69b55/README.md"]},
+        "topic-explorer": {"score": 5, "status": "verified", "evidence": "具 MQTT Explorer 與受控連線設定。", "sources": ["https://github.com/Slyke/mqttctl/blob/9231e01e8b159957c777e0749b8c8e4d48c69b55/README.md"]},
+        "operations": {"score": 4, "status": "verified", "evidence": "支援設定檢視、快照及多 broker 管理，但本專案的憑證回復流程仍需整合。", "sources": ["https://github.com/Slyke/mqttctl/blob/9231e01e8b159957c777e0749b8c8e4d48c69b55/README.md"]},
+        "maturity-maintenance": {"score": 1, "status": "partial", "evidence": "專案建立於 2026 年且尚無正式 release，長期維護性仍未知。", "sources": ["https://github.com/Slyke/mqttctl/commits/9231e01e8b159957c777e0749b8c8e4d48c69b55"]},
+        "delivery-cost": {"score": 4, "status": "partial", "evidence": "功能覆蓋高，但部署、安全與 Mosquitto 2.1 相容性需要補強。", "sources": ["https://github.com/Slyke/mqttctl/blob/9231e01e8b159957c777e0749b8c8e4d48c69b55/README.md"]}
+      }
+    },
+    {
+      "id": "custom-hybrid",
+      "name": "自行開發混合控制平面",
+      "license": {"spdx": "Apache-2.0", "source": "https://github.com/j3camp/mqtt-broker-stack/blob/dd5b959ca6955cb9bbc448b342fa3890b9861a10/LICENSE"},
+      "source": {"repository": "https://github.com/j3camp/mqtt-broker-stack", "commit": "dd5b959ca6955cb9bbc448b342fa3890b9861a10"},
+      "scores": {
+        "security-boundaries": {"score": 5, "status": "planned", "evidence": "架構明確分離瀏覽器、控制平面、broker 身分與受限 host runner，且禁止 Docker socket。", "sources": ["https://github.com/j3camp/mqtt-broker-stack/issues/7"]},
+        "dynamic-security": {"score": 5, "status": "planned", "evidence": "Mosquitto adapter 僅透過 DynSec control topic 管理身分與 ACL。", "sources": ["https://github.com/j3camp/mqtt-broker-stack/issues/12", "https://mosquitto.org/documentation/dynamic-security/"]},
+        "operator-auth-rbac": {"score": 5, "status": "planned", "evidence": "後台將以 OIDC、伺服器端 session 與 Viewer／Operator／Security Admin／Super Admin 權限矩陣實作。", "sources": ["https://github.com/j3camp/mqtt-broker-stack/issues/8"]},
+        "auditability": {"score": 5, "status": "planned", "evidence": "所有管理 mutation 將產生可歸屬、去敏、僅可附加的稽核事件。", "sources": ["https://github.com/j3camp/mqtt-broker-stack/issues/10"]},
+        "effective-permissions": {"score": 5, "status": "planned", "evidence": "權限模擬器會在套用前解析群組、角色、優先序、萬用字元與 deny 規則。", "sources": ["https://github.com/j3camp/mqtt-broker-stack/issues/14"]},
+        "deployment-fit": {"score": 4, "status": "planned", "evidence": "設計為附加 Compose override，保留既有 internal、external、WSS 與 control listener 邊界。", "sources": ["https://github.com/j3camp/mqtt-broker-stack/issues/7", "https://mosquitto.org/documentation/listeners/per-listener-settings/"]},
+        "license": {"score": 5, "status": "verified", "evidence": "本儲存庫採 Apache-2.0 授權。", "sources": ["https://github.com/j3camp/mqtt-broker-stack/blob/dd5b959ca6955cb9bbc448b342fa3890b9861a10/LICENSE"]},
+        "observability": {"score": 5, "status": "planned", "evidence": "重用 Prometheus、Grafana、Alloy 與 Loki，不在控制平面重造監控。", "sources": ["https://github.com/j3camp/mqtt-broker-stack/issues/20", "https://grafana.com/docs/loki/latest/get-started/overview/"]},
+        "topic-explorer": {"score": 4, "status": "planned", "evidence": "重用 MQTTX 或伺服器端 relay，使用獨立最小權限 MQTT 身分並隔離瀏覽器憑證。", "sources": ["https://github.com/j3camp/mqtt-broker-stack/issues/24", "https://github.com/emqx/MQTTX"]},
+        "operations": {"score": 4, "status": "planned", "evidence": "設定、憑證、備份、還原、驗證與回復採獨立 allow-list 工作流程。", "sources": ["https://github.com/j3camp/mqtt-broker-stack/issues/25"]},
+        "maturity-maintenance": {"score": 2, "status": "planned", "evidence": "設計尚未實作，但邊界、測試與檢視節點皆由本專案掌控。", "sources": ["https://github.com/j3camp/mqtt-broker-stack/issues/2"]},
+        "delivery-cost": {"score": 1, "status": "planned", "evidence": "即使重用官方 Dashboard、MQTTX 與 Grafana 生態，自行交付的初期成本仍最高。", "sources": ["https://github.com/j3camp/mqtt-broker-stack/issues/2"]}
+      }
+    }
+  ],
+  "summary": [
+    {"candidate_id": "custom-hybrid", "weighted_score": 86.4, "required_failures": [], "eligible": true, "rank": 1},
+    {"candidate_id": "mqttctl", "weighted_score": 76.0, "required_failures": ["deployment-fit"], "eligible": false, "rank": 2},
+    {"candidate_id": "eclipse-mosquitto-dashboard", "weighted_score": 36.0, "required_failures": ["auditability", "dynamic-security", "effective-permissions", "operator-auth-rbac"], "eligible": false, "rank": 3}
+  ]
+}

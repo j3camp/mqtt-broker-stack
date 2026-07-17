@@ -1,0 +1,14 @@
+{
+  "listen": {
+    "http": {"enabled": true, "host": "0.0.0.0", "port": 3900},
+    "https": {"enabled": false, "host": "0.0.0.0", "port": 3943, "certFile": null, "keyFile": null}
+  },
+  "auth": {"apiKey": "CHANGE_ME_EVALUATION_ONLY"},
+  "broker": {
+    "command": ["/usr/sbin/mosquitto", "-c", "/mosquitto/config/mosquitto.conf"],
+    "mainConfigPath": "/mosquitto/config/mosquitto.conf",
+    "dynsecStateFilePath": "/mosquitto/data/dynamic-security.json",
+    "keyFiles": {"caFile": null, "mosquittoPublicKey": null, "brokerPublicKey": null},
+    "dynsecBootstrap": {"username": "admin", "password": "CHANGE_ME_EVALUATION_ONLY"}
+  }
+}
