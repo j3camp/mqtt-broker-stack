@@ -183,6 +183,11 @@ class Task7ArchitectureContractTest(unittest.TestCase):
         self.assertIn("awk -F ':'", ci_user_helper)
         self.assertIn("$1 == user", ci_user_helper)
 
+        tls_test = read("tests/test-tls-verification.sh")
+        self.assertIn("-verify_return_error", tls_test)
+        self.assertIn("-verify_ip", tls_test)
+        self.assertNotIn('grep -c "Verify return code: 0"', tls_test)
+
 
 class DynSecMigrationUnitTest(unittest.TestCase):
     def setUp(self) -> None:

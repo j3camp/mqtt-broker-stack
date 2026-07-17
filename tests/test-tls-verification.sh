@@ -22,12 +22,13 @@ CA_FILE="${REPO_ROOT}/mosquitto/config/certs/ca.crt"
 [[ -f "${CA_FILE}" ]] || die "CA certificate not found: ${CA_FILE}."
 
 echo "--- Test: TLS 1.2 handshake with correct CA succeeds ---"
-# Just verify TCP TLS handshake works with openssl s_client
-RESULT="$(echo "" | openssl s_client \
+openssl s_client \
   -connect "${MQTT_HOST}:${MQTT_PORT}" \
   -CAfile "${CA_FILE}" \
-  -tls1_2 2>&1 | grep -c "Verify return code: 0" || true)"
-[[ "${RESULT}" -ge 1 ]] || die "TLS 1.2 connection with correct CA failed."
+  -verify_return_error \
+  -verify_ip "${MQTT_HOST}" \
+  -tls1_2 </dev/null >/dev/null 2>&1 \
+  || die "TLS 1.2 connection with correct CA and IP SAN failed."
 pass "TLS 1.2 with correct CA succeeds"
 
 echo "--- Test: wrong CA fails TLS handshake ---"
@@ -37,11 +38,14 @@ trap 'rm -f "${TMPCA}"' EXIT
 openssl req -new -x509 -newkey rsa:2048 -nodes \
   -keyout /dev/null -out "${TMPCA}" -days 1 \
   -subj "/CN=Wrong CA" >/dev/null 2>&1
-RESULT="$(echo "" | openssl s_client \
+if openssl s_client \
   -connect "${MQTT_HOST}:${MQTT_PORT}" \
   -CAfile "${TMPCA}" \
-  -tls1_2 2>&1 | grep -c "Verify return code: 0" || true)"
-[[ "${RESULT}" -eq 0 ]] || die "Wrong CA should have failed TLS verification."
+  -verify_return_error \
+  -verify_ip "${MQTT_HOST}" \
+  -tls1_2 </dev/null >/dev/null 2>&1; then
+  die "Wrong CA should have failed TLS verification."
+fi
 pass "Wrong CA fails TLS handshake"
 
 echo ""
