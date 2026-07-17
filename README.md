@@ -1,135 +1,72 @@
 # mqtt-broker-stack
 
-A Docker Compose-based commercial MQTT Broker deployment stack built around Eclipse Mosquitto.
-Supports Docker, TLS, username/password authentication, ACL, and protocol-level healthchecks.
+以 Docker Compose 部署 Eclipse Mosquitto 2.1 的 MQTT Broker stack。專案採用 Mosquitto 原生開源 Dynamic Security plugin，不依賴 Cedalo Management Center，提供 TLS、WSS、RBAC、遷移、回復與 CI 安全測試。
 
----
-
-## Quick Start
+## 快速開始
 
 ```bash
-# Clone and enter the repository
-git clone https://github.com/j3camp/mqtt-broker-stack.git
-cd mqtt-broker-stack
-
-# Initialise (creates .env, development certificates, and admin user)
+cp .env.example .env
 ./scripts/init.sh
-
-# Start the broker
-make up
-
-# Check broker health
-make status
+docker compose up -d
+./scripts/wait-dynsec-bootstrap.sh
+./scripts/dynsec-command.sh listClients
 ```
 
-## Architecture
+映像使用 2.1.2 multi-architecture manifest digest 固定，不會因同名 tag 被更新而漂移。
 
-The broker provides two separate listeners:
+## Listener 與信任邊界
 
-```mermaid
-flowchart LR
-    InternalApp[Internal Docker Service]
-    ExternalClient[External MQTT Client]
-    Broker[Mosquitto Broker]
-    Console[MQTTX Web]
+| Listener | 協定 | 驗證 | 可達範圍 |
+|---|---|---|---|
+| 1883 | MQTT | 匿名，不使用 Dynamic Security | 僅內部 Docker network |
+| 8883 | MQTTS | TLS + Dynamic Security | 主機對外 port |
+| 9001 | WSS | TLS + Dynamic Security | 預設僅 localhost |
+| 1884 | MQTTS | 專用管理帳號 + Dynamic Security | 僅隔離控制 network |
 
-    InternalApp -->|MQTT 1883 anonymous<br/>private Docker network| Broker
-    ExternalClient -->|MQTTS 8883<br/>TLS and username/password| Broker
-    Console -->|WSS 9001<br/>TLS and username/password| Broker
-```
+1883 與 1884 均不發布到主機。一般應用服務只能加入 `mqtt-internal`；只有一次性的管理容器能加入 `mqtt-control`。
 
-| Listener | Port | TLS | Auth | Host Published |
-|----------|------|-----|------|---------------|
-| Internal | 1883 | No | No (anonymous) | **No** — Docker network only |
-| External | 8883 | Yes | Username + password | Yes |
-| WebSocket (optional) | 9001 | Yes | Username + password | Optional |
-
-> ⚠️ Port 1883 is safe **only** within a trusted private Docker network.
-> Untrusted containers must not join the `mqtt-internal` network.
-
-## User Management
+## 使用者與權限管理
 
 ```bash
-# Create user
-./scripts/create-user.sh <username>
+# 建立帳號；預設沒有角色，因此無 topic 權限
+./scripts/create-user.sh device-01
 
-# Change password
-./scripts/change-password.sh <username>
-
-# Delete user
-./scripts/delete-user.sh <username>
+# 執行原生 mosquitto_ctrl dynsec 命令
+./scripts/dynsec-command.sh listClients
+./scripts/dynsec-command.sh createRole telemetry-writer
+./scripts/dynsec-command.sh addRoleACL \
+  telemetry-writer publishClientSend 'devices/%u/telemetry/#' allow 10
+./scripts/dynsec-command.sh addClientRole device-01 telemetry-writer 50
 ```
 
-## ACL Management
+管理密碼由 Docker secret 傳入隔離的工具容器，不會直接出現在主機程序參數。應用帳號採 default deny；`admin` 僅能管理 Dynamic Security 與讀取 `$SYS`，不能發布一般應用 topic。
+
+## 舊版遷移
+
+由 Mosquitto password/ACL 檔遷移前，先填寫帳號 owner：
 
 ```bash
-# Create an ACL file (see mosquitto/config/security/acl.example)
-cp mosquitto/config/security/acl.example mosquitto/config/security/acl
-
-# Enable ACL
-./scripts/enable-acl.sh
-
-# Disable ACL
-./scripts/disable-acl.sh
+cp mosquitto/config/security/migration-owners.example.csv \
+  mosquitto/config/security/migration-owners.csv
+./scripts/migrate-dynsec.sh
 ```
 
-## Certificate Management
+完整的 hash 相容性、ACL priority、驗收及降版步驟請見 [Mosquitto 2.1 與 Dynamic Security 遷移手冊](docs/migration-dynamic-security.md)。
 
-Development certificates are generated automatically by `./scripts/init.sh`.
-
-For a specific hostname:
+## 驗證
 
 ```bash
-./scripts/generate-cert.sh --hostname mqtt.example.com --ip 192.168.1.10
-```
-
-> ⚠️ Self-signed certificates are for development only.
-> Use a trusted CA for production.
-
-## Optional MQTTX Web Console
-
-MQTTX Web is an optional developer MQTT client console — not a broker administration tool.
-
-```bash
-docker compose -f compose.yaml -f compose.console.yaml up -d
-```
-
-Access at `http://localhost:80`. Use it for topic inspection and connection testing only.
-
-## Backup and Restore
-
-```bash
-# Create a backup
-./scripts/backup.sh
-
-# Restore from backup
-./scripts/restore.sh backups/mqtt-broker-backup-<timestamp>.tar.gz
-```
-
-## Validation and Testing
-
-```bash
-# Validate configuration
-make validate
-
-# Run integration tests
+./scripts/validate.sh
+python3 tests/task7_migration_test.py
 make test
 ```
 
-## Documentation
+CI 會驗證內部匿名 listener、外部匿名拒絕、TLS/WSS、使用者驗證、allow/deny/wildcard、角色與群組 priority、控制面隔離，以及遷移失敗自動回復。
 
-- [Architecture](docs/architecture.md)
-- [Security](docs/security.md)
-- [Configuration](docs/configuration.md)
-- [Operations](docs/operations.md)
-- [MQTT Administration Console Decision](docs/admin-console/README.md)
+## 文件
 
-## Production Checklist
-
-- [ ] Replace self-signed certificates with trusted CA certificates
-- [ ] Set strong passwords for all MQTT users
-- [ ] Configure `MQTT_TLS_BIND_ADDRESS` appropriately
-- [ ] Verify port 1883 is never published to the host
-- [ ] Set up automated backups
-- [ ] Monitor broker logs
-- [ ] Keep Mosquitto image version pinned and up-to-date
+- [架構](docs/architecture.md)
+- [設定](docs/configuration.md)
+- [營運](docs/operations.md)
+- [安全](docs/security.md)
+- [遷移與回復](docs/migration-dynamic-security.md)

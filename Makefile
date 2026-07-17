@@ -9,14 +9,14 @@ FORCE ?= 0
 
 .PHONY: help init up down restart status logs validate test test-architecture \
         create-user change-password delete-user \
-        enable-acl disable-acl \
+        dynsec migrate-dynsec rollback-dynsec \
         backup restore clean
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-init: ## Initialise the stack (certificates, password file, .env)
+init: ## Initialise the stack (certificates, DynSec administrator, .env)
 	@./scripts/init.sh
 
 up: ## Start the broker
@@ -58,11 +58,14 @@ change-password: ## Change password for a user (set USERNAME=<name>)
 delete-user: ## Delete an MQTT user (set USERNAME=<name>)
 	@./scripts/delete-user.sh $(USERNAME)
 
-enable-acl: ## Enable ACL enforcement on the external listener
-	@./scripts/enable-acl.sh
+dynsec: ## Run a DynSec command (set ARGS='listClients')
+	@./scripts/dynsec-command.sh $(ARGS)
 
-disable-acl: ## Disable ACL enforcement on the external listener
-	@./scripts/disable-acl.sh
+migrate-dynsec: ## Migrate legacy password/ACL files to Dynamic Security
+	@./scripts/migrate-dynsec.sh
+
+rollback-dynsec: ## Roll back the last Dynamic Security migration
+	@./scripts/rollback-dynsec.sh
 
 backup: ## Create a timestamped backup of broker state
 	@./scripts/backup.sh
@@ -78,6 +81,8 @@ clean: ## Remove all runtime data and containers (FORCE=1 required)
 	@$(COMPOSE) down -v --remove-orphans
 	@rm -f mosquitto/config/security/passwords
 	@rm -f mosquitto/config/security/acl
+	@rm -f mosquitto/config/security/dynsec-admin-password
+	@rm -f mosquitto/config/security/migration-owners.csv
 	@rm -f mosquitto/config/certs/server.crt
 	@rm -f mosquitto/config/certs/server.key
 	@rm -f mosquitto/config/certs/ca.crt

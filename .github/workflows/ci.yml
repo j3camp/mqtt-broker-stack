@@ -12,26 +12,24 @@ permissions:
 
 jobs:
   lint:
-    name: Lint
+    name: Lint and migration unit tests
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install ShellCheck
-        run: sudo apt-get install -y shellcheck
+      - name: Install linters
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y shellcheck
+          pip install yamllint
 
-      - name: ShellCheck — scripts
+      - name: ShellCheck scripts
         run: |
           shellcheck --severity=warning \
             scripts/*.sh \
-            mosquitto/scripts/healthcheck.sh \
+            mosquitto/scripts/*.sh \
             tests/*.sh \
             .github/scripts/ci-create-user.sh
-
-      - name: Install yamllint
-        run: pip install yamllint
 
       - name: YAML lint
         run: |
@@ -48,54 +46,78 @@ jobs:
       - name: Validate administration architecture decision
         run: bash tests/test-admin-console-architecture.sh
 
+      - name: Run Task 7 migration contract tests
+        run: python3 tests/task7_migration_test.py
+
   compose-config:
     name: Docker Compose Config
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v4
 
-      - name: Copy .env
-        run: cp .env.example .env
+      - name: Prepare compose inputs
+        run: |
+          cp .env.example .env
+          mkdir -p mosquitto/config/security
+          printf '%s\n' compose-validation-secret \
+            > mosquitto/config/security/dynsec-admin-password
 
-      - name: Validate docker compose config
+      - name: Validate Docker Compose config
         run: docker compose config
 
   integration:
     name: Integration Tests
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     env:
       MQTT_INITIAL_USERNAME: ci-admin
       MQTT_INITIAL_PASSWORD: ci-test-password
-      MQTT_SERVER_HOSTNAME: localhost
+      MQTT_TEST_USERNAME: ci-admin
       MQTT_TEST_PASSWORD: ci-test-password
+      MQTT_SERVER_HOSTNAME: localhost
+      DYNSEC_ADMIN_PASSWORD: ci-dynsec-admin-password
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install OpenSSL and MQTT tools
+      - name: Install OpenSSL, MQTT, and WSS test tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y openssl mosquitto-clients
+          python3 -m pip install paho-mqtt
 
-      - name: Copy .env
+      - name: Copy environment
         run: cp .env.example .env
 
       - name: Generate development certificates
-        run: ./scripts/generate-cert.sh --hostname localhost --ip 127.0.0.1
+        run: |
+          ./scripts/generate-cert.sh \
+            --hostname localhost \
+            --dns mosquitto-control \
+            --ip 127.0.0.1
 
       - name: Verify certificate generation
         run: |
           test -f mosquitto/config/certs/ca.crt
           test -f mosquitto/config/certs/server.crt
           test -f mosquitto/config/certs/server.key
-          openssl verify -CAfile mosquitto/config/certs/ca.crt mosquitto/config/certs/server.crt
+          openssl verify \
+            -CAfile mosquitto/config/certs/ca.crt \
+            mosquitto/config/certs/server.crt
 
-      - name: Create initial user
-        run: bash .github/scripts/ci-create-user.sh
+      - name: Prepare administrator and legacy migration fixtures
+        run: |
+          ./scripts/bootstrap-dynsec.sh --force
+          bash .github/scripts/ci-create-user.sh
+          cat > mosquitto/config/security/acl <<'EOF'
+          user ci-admin
+          topic readwrite test/#
+          topic deny test/private/#
+          pattern write devices/%u/telemetry/#
+          EOF
+          cat > mosquitto/config/security/migration-owners.csv <<'EOF'
+          username,owner,group
+          ci-admin,CI Platform Team,ci-applications
+          EOF
 
       - name: Validate static configuration
         run: ./scripts/validate.sh --quick
@@ -110,18 +132,24 @@ jobs:
             STATUS="$(docker inspect \
               --format '{{.State.Health.Status}}' \
               "$(docker compose ps -q mosquitto)" 2>/dev/null || echo unknown)"
-            echo "  Healthcheck status: ${STATUS}"
+            echo "Healthcheck status: ${STATUS}"
             if [ "${STATUS}" = "healthy" ]; then
-              echo "Broker is healthy."
               break
             fi
             if [ "${i}" -eq 36 ]; then
-              echo "Timed out waiting for healthy status." >&2
               docker compose logs mosquitto
               exit 1
             fi
             sleep 5
           done
+
+      - name: Migrate legacy identities and ACLs
+        run: |
+          ./scripts/wait-dynsec-bootstrap.sh
+          ./scripts/migrate-dynsec.sh \
+            --password-file mosquitto/config/security/passwords \
+            --acl-file mosquitto/config/security/acl \
+            --owners-file mosquitto/config/security/migration-owners.csv
 
       - name: Test internal listener
         run: bash tests/test-internal.sh
@@ -134,6 +162,18 @@ jobs:
 
       - name: Test external authentication
         run: bash tests/test-external-auth.sh
+
+      - name: Test Dynamic Security ACL matrix
+        run: bash tests/test-acl.sh
+
+      - name: Test WSS authentication
+        run: python3 tests/test-wss-auth.py
+
+      - name: Test control-plane isolation
+        run: bash tests/test-control-isolation.sh
+
+      - name: Test migration rollback
+        run: bash tests/test-migration-rollback.sh
 
       - name: Test healthcheck
         run: bash tests/test-healthcheck.sh

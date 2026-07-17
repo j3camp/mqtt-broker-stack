@@ -184,6 +184,12 @@ class ArchitectureArtifactsTest(unittest.TestCase):
                 self.assertIn("CHANGE_ME", env_example)
                 self.assertNotRegex(env_example, r"(?i)(password|secret|api_key)=.{16,}")
 
+        mqttctl_conf = read_text(PLAN_DIR / "poc" / "mqttctl" / "config" / "mosquitto.conf")
+        self.assertNotIn("per_listener_settings", mqttctl_conf)
+        self.assertIn("plugin_load dynsec", mqttctl_conf)
+        self.assertIn("listener_allow_anonymous false", mqttctl_conf)
+        self.assertIn("plugin_use dynsec", mqttctl_conf)
+
     def test_evaluations_use_primary_evidence_and_record_limitations(self) -> None:
         for candidate_id in ("eclipse-mosquitto-dashboard", "mqttctl"):
             with self.subTest(candidate=candidate_id):
