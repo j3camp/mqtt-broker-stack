@@ -19,18 +19,7 @@ fi
 MQTT_HOST="127.0.0.1"
 MQTT_PORT="${MQTT_TLS_PORT:-8883}"
 CA_FILE="${REPO_ROOT}/mosquitto/config/certs/ca.crt"
-PASSWD_FILE="${REPO_ROOT}/mosquitto/config/security/passwords"
-
 [[ -f "${CA_FILE}" ]] || die "CA certificate not found: ${CA_FILE}."
-
-TEST_USER="${MQTT_INITIAL_USERNAME:-admin}"
-TEST_PASS="${MQTT_TEST_PASSWORD:-}"
-if [[ -z "${TEST_PASS}" ]]; then
-  if [[ -r "${PASSWD_FILE}" ]]; then
-    TEST_USER="$(cut -d: -f1 "${PASSWD_FILE}" | head -1)"
-  fi
-  read -rsp "Password for '${TEST_USER}': " TEST_PASS; echo
-fi
 
 echo "--- Test: TLS 1.2 handshake with correct CA succeeds ---"
 # Just verify TCP TLS handshake works with openssl s_client

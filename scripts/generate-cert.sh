@@ -4,7 +4,7 @@
 # Server cert and key are placed in mosquitto/config/certs/.
 #
 # Usage:
-#   ./scripts/generate-cert.sh [--hostname <name>] [--ip <addr>] [--days <n>] [--force]
+#   ./scripts/generate-cert.sh [--hostname <name>] [--dns <name>] [--ip <addr>] [--days <n>] [--force]
 set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,6 +12,7 @@ CA_DIR="${REPO_ROOT}/certs/ca"
 CERT_DIR="${REPO_ROOT}/mosquitto/config/certs"
 
 HOSTNAME_VAL="localhost"
+DNS_NAMES=()
 IP_ADDRS=()
 CA_DAYS=3650
 SERVER_DAYS=825
@@ -23,6 +24,7 @@ Usage: $0 [OPTIONS]
 
 Options:
   --hostname <name>   Server hostname / DNS SAN (default: localhost)
+  --dns <name>        Additional DNS SAN (may be repeated)
   --ip <addr>         IP SAN (may be repeated)
   --days <n>          Server certificate validity in days (default: 825)
   --ca-days <n>       CA certificate validity in days (default: 3650)
@@ -37,6 +39,7 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --hostname) HOSTNAME_VAL="$2"; shift 2 ;;
+    --dns)      DNS_NAMES+=("$2"); shift 2 ;;
     --ip)       IP_ADDRS+=("$2"); shift 2 ;;
     --days)     SERVER_DAYS="$2"; shift 2 ;;
     --ca-days)  CA_DAYS="$2"; shift 2 ;;
@@ -65,6 +68,9 @@ echo "    Days     : server=${SERVER_DAYS}, CA=${CA_DAYS}"
 
 # Build SAN extension string
 SAN_ENTRIES="DNS:${HOSTNAME_VAL}"
+for dns_name in "${DNS_NAMES[@]:-}"; do
+  [[ -n "${dns_name}" ]] && SAN_ENTRIES="${SAN_ENTRIES},DNS:${dns_name}"
+done
 for ip in "${IP_ADDRS[@]:-}"; do
   SAN_ENTRIES="${SAN_ENTRIES},IP:${ip}"
 done

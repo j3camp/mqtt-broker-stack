@@ -1,73 +1,35 @@
-# Security
+# 安全設計
 
-## TLS
+## 驗證與傳輸
 
-All external connections require TLS 1.2 or newer. Connections on port 8883 without valid TLS are rejected.
+- 8883、9001 與 1884 皆要求 TLS 1.2 以上及 Dynamic Security 驗證。
+- 1883 允許匿名，只存在於可信任的 internal Docker network。
+- 外部與控制 listener 明確 `listener_allow_anonymous false`。
+- 管理密碼使用 Docker secret；一般備份刻意不包含其明文。
 
-### Certificate Hierarchy
+## 最小權限
 
-```
-Development CA (certs/ca/ca.key + ca.crt)
-  └── Server Certificate (mosquitto/config/certs/server.crt + server.key)
-```
+- Dynamic Security 的四項 default ACL access 均為 deny。
+- 應用帳號建立後若未指派角色，只有驗證身分，不能存取任何 topic。
+- 遷移帳號各自擁有明確角色，避免把個人權限意外提升為群組權限。
+- `admin` 只保留 `dynsec-admin` 與 `sys-observe`，不保留 `super-admin`、`client` 或 `topic-observe`。
+- deny ACL 使用較高 priority，確保明確拒絕優先於較廣的 allow。
 
-The CA private key is stored in `certs/ca/` — this directory is **never** mounted into Mosquitto.
+## 控制面
 
-### Certificate Requirements
+控制 listener 綁定 `mqtt-control` 的固定 broker IP，沒有 host port。管理 helper 唯讀、drop 所有 capabilities、禁止 privilege escalation，也沒有 Docker socket。一般應用 network 對 1884 不可達。
 
-- Server certificate must include Subject Alternative Name (DNS and/or IP).
-- Server certificate uses SHA-256 signature.
-- Server certificate must have `keyUsage: digitalSignature, keyEncipherment`.
-- Server certificate must have `extendedKeyUsage: serverAuth`.
-- `basicConstraints: CA:FALSE` on server certificate.
+## 敏感檔案
 
-### Production Certificates
+| 檔案 | 保護方式 |
+|---|---|
+| `.env` | 不提交，限制部署主機讀取權 |
+| `dynsec-admin-password` | mode 600、Docker secret、另存秘密管理系統 |
+| `dynamic-security.json` | named volume、備份加密、不得公開 |
+| `migration-owners.csv` | 不提交，視為帳號治理資料 |
+| server／CA private key | 不提交，正式環境交由 PKI 管理 |
+| `backups/` | mode 600、加密、限制保存期限 |
 
-For production:
+## 安全驗證
 
-- Use a trusted CA (Let's Encrypt, internal PKI, or commercial CA).
-- Do not use self-signed development certificates in production.
-- Rotate server certificates before expiry.
-
-## Authentication
-
-External listener requires username and password. Passwords are stored in the Mosquitto password file format (bcrypt hashed). The password file is at `mosquitto/config/security/passwords`.
-
-Passwords are never:
-- Passed as command-line arguments.
-- Logged or echoed.
-- Stored in Git.
-
-## Authorization (ACL)
-
-ACL is disabled by default. When enabled, topic access is controlled per-user. See `mosquitto/config/security/acl.example` for examples.
-
-Enable with: `./scripts/enable-acl.sh`
-Disable with: `./scripts/disable-acl.sh`
-
-## Sensitive Files
-
-Files excluded from Git (see `.gitignore`):
-
-| File | Reason |
-|------|--------|
-| `.env` | Contains deployment settings |
-| `certs/ca/ca.key` | CA private key — never commit |
-| `mosquitto/config/certs/server.key` | Server private key |
-| `mosquitto/config/security/passwords` | Password hashes |
-| `mosquitto/config/security/acl` | Runtime ACL |
-| `backups/` | May contain sensitive data |
-
-## Recommended File Permissions
-
-| File | Recommended Mode |
-|------|-----------------|
-| `mosquitto/config/security/passwords` | `600` |
-| `mosquitto/config/certs/server.key` | `644` (world-readable so the Mosquitto process can read it from a read-only Docker volume mount) |
-| `certs/ca/ca.key` | `600` |
-
-## Internal Listener Security
-
-Port 1883 is accessible only via the `mqtt-internal` Docker bridge network. It is NOT published to the Docker host. Anonymous connections are allowed on this port for trusted containers.
-
-Only add containers you trust to the `mqtt-internal` network.
+CI 同時測試成功與失敗路徑。除了 TLS 與正確帳密，還會驗證匿名與錯誤密碼拒絕、應用 admin publish 拒絕、wildcard 邊界、ACL priority、控制面隔離及 rollback 完整性。

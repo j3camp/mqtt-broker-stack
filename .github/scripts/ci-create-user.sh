@@ -15,7 +15,7 @@ MQTT_CREDENTIAL="${MQTT_INITIAL_PASSWORD:?MQTT_INITIAL_PASSWORD is required}"
 PASSWD_FILE="${REPO_ROOT}/mosquitto/config/security/passwords"
 mkdir -p "$(dirname "${PASSWD_FILE}")"
 
-MOSQUITTO_IMG="eclipse-mosquitto:${MOSQUITTO_VERSION}"
+MOSQUITTO_IMG="${MOSQUITTO_IMAGE:?MOSQUITTO_IMAGE is required}"
 
 printf '%s' "${MQTT_CREDENTIAL}" | docker run --rm -i \
   -e "MQTT_USER=${MQTT_USER}" \

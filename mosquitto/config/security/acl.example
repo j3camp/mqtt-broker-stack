@@ -1,5 +1,5 @@
-# ACL example — copy to /mosquitto/config/security/acl to customise.
-# Enable with: ./scripts/enable-acl.sh
+# Legacy ACL input example for scripts/migrate-dynsec.sh.
+# New deployments should manage roles and ACLs with scripts/dynsec-command.sh.
 
 user admin
 topic readwrite #

@@ -46,7 +46,7 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
   set +o allexport
 fi
 
-MOSQUITTO_IMG="eclipse-mosquitto:${MOSQUITTO_VERSION:-2.0.21}"
+MOSQUITTO_IMG="${MOSQUITTO_IMAGE:?MOSQUITTO_IMAGE is required}"
 
 BROKER_CONTAINER_ID="$(
   "${COMPOSE[@]}" ps -q mosquitto 2>/dev/null || true

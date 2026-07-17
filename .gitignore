@@ -1,4 +1,4 @@
-# Runtime secrets — never commit
+# Runtime secrets - never commit
 .env
 
 # Generated certificates and keys
@@ -7,12 +7,14 @@ mosquitto/config/certs/*.crt
 mosquitto/config/certs/*.pem
 mosquitto/config/certs/*.csr
 
-# CA material (kept outside Mosquitto mounts)
+# CA material kept outside Mosquitto mounts
 certs/
 
 # Runtime security files
 mosquitto/config/security/passwords
 mosquitto/config/security/acl
+mosquitto/config/security/dynsec-admin-password
+mosquitto/config/security/migration-owners.csv
 
 # Backup archives
 backups/
@@ -21,3 +23,5 @@ backups/
 # Temporary files
 tmp/
 *.tmp
+__pycache__/
+*.pyc

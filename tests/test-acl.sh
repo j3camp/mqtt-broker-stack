@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-# Integration test: ACL enforcement.
-# Verifies that when ACL is enabled, authorized and unauthorized topic access behaves correctly.
-# Skips gracefully when ACL is not enabled.
+# Integration test: Dynamic Security allow/deny, wildcard, group, role, and priority behavior.
 set -Eeuo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-EXTERNAL_CONF="${REPO_ROOT}/mosquitto/config/conf.d/30-external.conf"
+ROLE="ci-matrix-role-$$"
+GROUP="ci-matrix-group-$$"
 
 die() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "PASS: $*"; }
-skip() { echo "SKIP: $*"; }
 
-# Load .env
 if [[ -f "${REPO_ROOT}/.env" ]]; then
   set -o allexport
   # shellcheck disable=SC1090
@@ -19,34 +16,48 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
   set +o allexport
 fi
 
-MQTT_HOST="127.0.0.1"
-MQTT_PORT="${MQTT_TLS_PORT:-8883}"
+HOST="127.0.0.1"
+PORT="${MQTT_TLS_PORT:-8883}"
 CA_FILE="${REPO_ROOT}/mosquitto/config/certs/ca.crt"
-PASSWD_FILE="${REPO_ROOT}/mosquitto/config/security/passwords"
+USERNAME="${MQTT_TEST_USERNAME:?MQTT_TEST_USERNAME is required}"
+PASSWORD="${MQTT_TEST_PASSWORD:?MQTT_TEST_PASSWORD is required}"
+AUTH=(--cafile "${CA_FILE}" -h "${HOST}" -p "${PORT}" -V 5 -u "${USERNAME}" -P "${PASSWORD}")
 
-# Check if ACL is enabled
-if ! grep -q "^acl_file" "${EXTERNAL_CONF}" 2>/dev/null; then
-  skip "ACL is not enabled. Enable it with ./scripts/enable-acl.sh to run these tests."
-  exit 0
-fi
+cleanup() {
+  "${REPO_ROOT}/scripts/dynsec-command.sh" removeGroupClient "${GROUP}" "${USERNAME}" >/dev/null 2>&1 || true
+  "${REPO_ROOT}/scripts/dynsec-command.sh" deleteGroup "${GROUP}" >/dev/null 2>&1 || true
+  "${REPO_ROOT}/scripts/dynsec-command.sh" deleteRole "${ROLE}" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 
-[[ -f "${CA_FILE}" ]] || die "CA certificate not found."
-[[ -f "${PASSWD_FILE}" ]] || die "Password file not found."
+publish_allowed() {
+  mosquitto_pub "${AUTH[@]}" -q 1 -t "$1" -m allowed >/dev/null 2>&1 \
+    || die "Expected publish allow for $1"
+}
 
-TEST_USER="$(cut -d: -f1 "${PASSWD_FILE}" | head -1)"
-TEST_PASS="${MQTT_TEST_PASSWORD:-}"
-if [[ -z "${TEST_PASS}" ]]; then
-  read -rsp "Password for '${TEST_USER}': " TEST_PASS; echo
-fi
+publish_denied() {
+  if mosquitto_pub "${AUTH[@]}" -q 1 -t "$1" -m denied >/dev/null 2>&1; then
+    die "Expected publish deny for $1"
+  fi
+}
 
-echo "--- Test: authorized topic publish succeeds ---"
-mosquitto_pub \
-  --cafile "${CA_FILE}" \
-  -h "${MQTT_HOST}" -p "${MQTT_PORT}" \
-  -u "${TEST_USER}" -P "${TEST_PASS}" \
-  -t "test/acl/authorized" -m "hello" 2>/dev/null \
-  && pass "Authorized publish succeeded" \
-  || die "Authorized publish failed unexpectedly."
+publish_allowed "test/acl/allowed"
+pass "Explicit allow rule"
+publish_denied "test/private/blocked"
+pass "Higher-priority explicit deny overrides broad allow"
+publish_allowed "devices/${USERNAME}/telemetry/temperature"
+publish_denied "devices/another-user/telemetry/temperature"
+pass "Username wildcard substitution"
 
-echo ""
-echo "ACL tests PASSED."
+"${REPO_ROOT}/scripts/dynsec-command.sh" createRole "${ROLE}" >/dev/null
+"${REPO_ROOT}/scripts/dynsec-command.sh" addRoleACL \
+  "${ROLE}" publishClientSend 'group/ci/#' allow 10 >/dev/null
+"${REPO_ROOT}/scripts/dynsec-command.sh" addRoleACL \
+  "${ROLE}" publishClientSend 'group/ci/blocked' deny 100 >/dev/null
+"${REPO_ROOT}/scripts/dynsec-command.sh" createGroup "${GROUP}" >/dev/null
+"${REPO_ROOT}/scripts/dynsec-command.sh" addGroupRole "${GROUP}" "${ROLE}" 50 >/dev/null
+"${REPO_ROOT}/scripts/dynsec-command.sh" addGroupClient "${GROUP}" "${USERNAME}" 50 >/dev/null
+
+publish_allowed "group/ci/allowed"
+publish_denied "group/ci/blocked"
+pass "Group role assignment and ACL priority"

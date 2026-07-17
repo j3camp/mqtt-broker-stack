@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Create a timestamped backup of the Mosquitto broker state.
-# The backup includes: configuration, certificates (public), password file,
-# runtime ACL, persistence data, and a manifest.
+# The backup includes: configuration, public certificates, Dynamic Security
+# state, legacy migration inputs when present, persistence data, and a manifest.
 # CA private keys are NOT included.
 #
 # Usage:
@@ -29,7 +29,7 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
   source "${REPO_ROOT}/.env"
   set +o allexport
 fi
-MOSQUITTO_VERSION="${MOSQUITTO_VERSION:-2.0.21}"
+MOSQUITTO_IMAGE="${MOSQUITTO_IMAGE:?MOSQUITTO_IMAGE is required in .env}"
 
 TIMESTAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP_NAME="mqtt-broker-backup-${TIMESTAMP}"
@@ -60,6 +60,8 @@ mkdir -p "${STAGEDIR}/security"
   && cp "${REPO_ROOT}/mosquitto/config/security/passwords" "${STAGEDIR}/security/"
 [[ -f "${REPO_ROOT}/mosquitto/config/security/acl" ]] \
   && cp "${REPO_ROOT}/mosquitto/config/security/acl" "${STAGEDIR}/security/"
+[[ -f "${REPO_ROOT}/mosquitto/config/security/migration-owners.csv" ]] \
+  && cp "${REPO_ROOT}/mosquitto/config/security/migration-owners.csv" "${STAGEDIR}/security/"
 
 # --- Persistence data (from Docker volume via running container) ---
 mkdir -p "${STAGEDIR}/data"
@@ -68,6 +70,10 @@ if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   if [[ -n "${CONTAINER_ID}" ]]; then
     info "Copying persistence data from running container..."
     docker cp "${CONTAINER_ID}:/mosquitto/data/." "${STAGEDIR}/data/" 2>/dev/null || true
+    if [[ -f "${STAGEDIR}/data/dynamic-security.json" ]]; then
+      cp "${STAGEDIR}/data/dynamic-security.json" "${STAGEDIR}/security/"
+      chmod 600 "${STAGEDIR}/security/dynamic-security.json"
+    fi
   else
     info "Container not running — using volume data directly (may be incomplete)."
   fi
@@ -78,7 +84,7 @@ cat > "${STAGEDIR}/manifest.json" <<MANIFEST
 {
   "backup_name": "${BACKUP_NAME}",
   "timestamp": "${TIMESTAMP}",
-  "mosquitto_version": "${MOSQUITTO_VERSION}",
+  "mosquitto_image": "${MOSQUITTO_IMAGE}",
   "created_by": "mqtt-broker-stack backup.sh"
 }
 MANIFEST
@@ -90,4 +96,5 @@ tar -czf "${ARCHIVE}" -C "${TMPDIR}" "${BACKUP_NAME}"
 chmod 600 "${ARCHIVE}"
 
 info "Backup complete: ${ARCHIVE}"
-info "Archive does not contain CA private keys or server private key."
+info "Archive contains sensitive authorization state; keep mode 600 and encrypt at rest."
+info "Archive does not contain the DynSec administrator plaintext secret or private TLS keys."

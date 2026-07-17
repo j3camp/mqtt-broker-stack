@@ -33,7 +33,11 @@ info "Verifying required files in archive..."
 [[ -f "${STAGEDIR}/manifest.json" ]] || die "Missing manifest.json in archive."
 [[ -d "${STAGEDIR}/config" ]] || die "Missing config directory in archive."
 [[ -f "${STAGEDIR}/config/mosquitto.conf" ]] || die "Missing mosquitto.conf in archive."
-[[ -f "${STAGEDIR}/security/passwords" ]] || die "Missing passwords file in archive."
+if [[ ! -f "${STAGEDIR}/security/dynamic-security.json" \
+      && ! -f "${STAGEDIR}/data/dynamic-security.json" \
+      && ! -f "${STAGEDIR}/security/passwords" ]]; then
+  die "Archive has neither Dynamic Security state nor a legacy password file."
+fi
 info "Archive validated."
 
 # Display manifest
@@ -77,18 +81,23 @@ if [[ -d "${STAGEDIR}/security" ]]; then
     && chmod 600 "${REPO_ROOT}/mosquitto/config/security/passwords"
   [[ -f "${STAGEDIR}/security/acl" ]] \
     && cp "${STAGEDIR}/security/acl" "${REPO_ROOT}/mosquitto/config/security/acl"
+  [[ -f "${STAGEDIR}/security/migration-owners.csv" ]] \
+    && cp "${STAGEDIR}/security/migration-owners.csv" \
+      "${REPO_ROOT}/mosquitto/config/security/migration-owners.csv"
 fi
 
 info "Restoring persistence data..."
 if [[ -d "${STAGEDIR}/data" ]] && command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
   # Start a temporary container to restore volume data
-  MOSQUITTO_VERSION="$(grep '"mosquitto_version"' "${STAGEDIR}/manifest.json" 2>/dev/null \
-    | sed 's/.*: *"\(.*\)".*/\1/' || echo "2.0.21")"
+  MOSQUITTO_IMAGE="$(grep '"mosquitto_image"' "${STAGEDIR}/manifest.json" 2>/dev/null \
+    | sed 's/.*: *"\(.*\)".*/\1/' || true)"
+  [[ -n "${MOSQUITTO_IMAGE}" ]] || die "Backup manifest does not contain mosquitto_image."
   docker run --rm \
     -v mqtt-broker-stack_mosquitto-data:/mosquitto/data \
     -v "${STAGEDIR}/data:/restore-data:ro" \
-    "eclipse-mosquitto:${MOSQUITTO_VERSION}" \
-    sh -c "cp -r /restore-data/. /mosquitto/data/" 2>/dev/null || true
+    "${MOSQUITTO_IMAGE}" \
+    sh -c 'cp -r /restore-data/. /mosquitto/data/ && chown -R mosquitto:mosquitto /mosquitto/data' \
+    || die "Could not restore persistence data."
 fi
 
 # 6. Validate restored configuration
