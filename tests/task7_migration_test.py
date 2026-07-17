@@ -7,6 +7,7 @@ import csv
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -37,6 +38,27 @@ def load_migration_module():
 
 
 class Task7ArchitectureContractTest(unittest.TestCase):
+    def test_runtime_shell_entrypoints_are_executable_in_git(self) -> None:
+        entrypoints = [
+            "mosquitto/scripts/dynsec-entrypoint.sh",
+            "mosquitto/scripts/harden-dynsec.sh",
+            "mosquitto/scripts/install-dynsec-state.sh",
+            "mosquitto/scripts/mosquitto-entrypoint.sh",
+            "scripts/bootstrap-dynsec.sh",
+            "scripts/dynsec-command.sh",
+            "scripts/migrate-dynsec.sh",
+            "scripts/rollback-dynsec.sh",
+            "scripts/wait-dynsec-bootstrap.sh",
+        ]
+        for path in entrypoints:
+            with self.subTest(path=path):
+                index_entry = subprocess.check_output(
+                    ["git", "ls-files", "--stage", "--", path],
+                    cwd=ROOT,
+                    text=True,
+                )
+                self.assertTrue(index_entry.startswith("100755 "), index_entry)
+
     def test_required_artifacts_exist(self) -> None:
         required = [
             "mosquitto/config/conf.d/35-control.conf",
@@ -45,10 +67,12 @@ class Task7ArchitectureContractTest(unittest.TestCase):
             "mosquitto/scripts/dynsec-entrypoint.sh",
             "mosquitto/scripts/harden-dynsec.sh",
             "mosquitto/scripts/install-dynsec-state.sh",
+            "mosquitto/scripts/mosquitto-entrypoint.sh",
             "scripts/dynsec-command.sh",
             "scripts/migrate-dynsec.sh",
             "scripts/migrate_dynsec.py",
             "scripts/rollback-dynsec.sh",
+            "scripts/wait-dynsec-bootstrap.sh",
             "tests/test-control-isolation.sh",
             "tests/test-migration-rollback.sh",
             "tests/test-wss-auth.py",
@@ -75,7 +99,7 @@ class Task7ArchitectureContractTest(unittest.TestCase):
         self.assertNotIn("per_listener_settings", active)
         self.assertIn("plugin_load dynsec /usr/lib/mosquitto_dynamic_security.so", root_config)
         self.assertIn("plugin_opt_config_file /mosquitto/data/dynamic-security.json", root_config)
-        self.assertIn("plugin_opt_password_init_file /run/secrets/dynsec_admin_password", root_config)
+        self.assertIn("plugin_opt_password_init_file /tmp/dynsec_admin_password", root_config)
 
         self.assertIn("listener 1883", internal)
         self.assertIn("listener_allow_anonymous true", internal)
@@ -105,6 +129,21 @@ class Task7ArchitectureContractTest(unittest.TestCase):
         self.assertNotRegex(compose, r"(?m)^\s*-\s*[\"']?[^\n]*:(?:1883|1884)(?:[\"']?\s*$)")
         self.assertRegex(compose, r"127\.0\.0\.1:\$\{MQTT_WSS_PORT:-9001\}:9001")
         self.assertNotIn("/var/run/docker.sock", compose)
+        self.assertIn("/mosquitto/scripts/mosquitto-entrypoint.sh", compose)
+        broker_entrypoint = read("mosquitto/scripts/mosquitto-entrypoint.sh")
+        self.assertIn("/run/secrets/dynsec_admin_password", broker_entrypoint)
+        self.assertIn("/tmp/dynsec_admin_password", broker_entrypoint)
+        self.assertIn("chown mosquitto:mosquitto", broker_entrypoint)
+        self.assertIn("chmod 400", broker_entrypoint)
+        self.assertIn("exec /docker-entrypoint.sh", broker_entrypoint)
+
+        workflow = read(".github/workflows/ci.yml")
+        self.assertNotIn("docker compose wait dynsec-bootstrap", workflow)
+        self.assertIn("./scripts/wait-dynsec-bootstrap.sh", workflow)
+        bootstrap_wait = read("scripts/wait-dynsec-bootstrap.sh")
+        self.assertIn("ps -aq dynsec-bootstrap", bootstrap_wait)
+        self.assertIn("docker wait", bootstrap_wait)
+        self.assertIn(".State.ExitCode", bootstrap_wait)
         hardener = read("mosquitto/scripts/harden-dynsec.sh")
         for acl_type in (
             "publishClientSend",

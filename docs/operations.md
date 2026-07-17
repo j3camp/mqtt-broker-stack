@@ -5,7 +5,7 @@
 ```bash
 ./scripts/init.sh
 docker compose up -d
-docker compose wait dynsec-bootstrap
+./scripts/wait-dynsec-bootstrap.sh
 ./scripts/validate.sh
 ```
 

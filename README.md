@@ -8,7 +8,7 @@
 cp .env.example .env
 ./scripts/init.sh
 docker compose up -d
-docker compose wait dynsec-bootstrap
+./scripts/wait-dynsec-bootstrap.sh
 ./scripts/dynsec-command.sh listClients
 ```
 

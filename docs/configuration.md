@@ -46,4 +46,4 @@
 ./scripts/bootstrap-dynsec.sh
 ```
 
-管理 secret 路徑為 `mosquitto/config/security/dynsec-admin-password`，必須是 mode 600 且不提交。ACL、角色與群組均透過 `scripts/dynsec-command.sh` 線上變更。
+管理 secret 路徑為 `mosquitto/config/security/dynsec-admin-password`，必須是 mode 600 且不提交。Broker entrypoint 會在 container 內複製成 mode 400、owner 為 `mosquitto` 的 `/tmp/dynsec_admin_password`，避免 file-backed Compose secret 保留 root-only 權限而無法初始化。ACL、角色與群組均透過 `scripts/dynsec-command.sh` 線上變更。

@@ -3,6 +3,8 @@ services:
   mosquitto:
     image: ${MOSQUITTO_IMAGE}
     restart: unless-stopped
+    entrypoint:
+      - /mosquitto/scripts/mosquitto-entrypoint.sh
     ports:
       - "${MQTT_TLS_BIND_ADDRESS:-0.0.0.0}:${MQTT_TLS_PORT:-8883}:8883"
       - "127.0.0.1:${MQTT_WSS_PORT:-9001}:9001"

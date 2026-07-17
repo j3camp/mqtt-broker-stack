@@ -38,6 +38,7 @@ REQUIRED_FILES=(
   mosquitto/config/conf.d/40-websocket.conf
   mosquitto/config/security/dynsec-admin-password
   mosquitto/scripts/dynsec-entrypoint.sh
+  mosquitto/scripts/mosquitto-entrypoint.sh
 )
 for relative in "${REQUIRED_FILES[@]}"; do
   [[ -f "${REPO_ROOT}/${relative}" ]] && pass "${relative}" || fail "Missing ${relative}"
@@ -65,6 +66,9 @@ grep -q '^plugin_load dynsec /usr/lib/mosquitto_dynamic_security.so$' "${ROOT_CO
   && pass "Dynamic Security plugin is loaded once" || fail "plugin_load dynsec is missing"
 grep -q '^plugin_opt_config_file /mosquitto/data/dynamic-security.json$' "${ROOT_CONFIG}" \
   && pass "Dynamic Security state is persistent" || fail "DynSec state path is missing"
+grep -q '^plugin_opt_password_init_file /tmp/dynsec_admin_password$' "${ROOT_CONFIG}" \
+  && pass "Dynamic Security bootstrap uses the protected container copy" \
+  || fail "DynSec bootstrap password path is invalid"
 
 INTERNAL="${REPO_ROOT}/mosquitto/config/conf.d/20-internal.conf"
 grep -q '^listener_allow_anonymous true$' "${INTERNAL}" \

@@ -145,7 +145,7 @@ jobs:
 
       - name: Migrate legacy identities and ACLs
         run: |
-          docker compose wait dynsec-bootstrap
+          ./scripts/wait-dynsec-bootstrap.sh
           ./scripts/migrate-dynsec.sh \
             --password-file mosquitto/config/security/passwords \
             --acl-file mosquitto/config/security/acl \
