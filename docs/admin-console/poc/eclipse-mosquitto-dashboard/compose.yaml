@@ -1,0 +1,23 @@
+services:
+  dashboard:
+    build:
+      context: .
+      args:
+        MOSQUITTO_DASHBOARD_COMMIT: 7b8aba105b77253309de24664bbae69d0cae3da0
+    image: mqtt-admin-evaluation/mosquitto-dashboard:2.1.2-7b8aba1
+    read_only: true
+    tmpfs:
+      - /mosquitto/data
+      - /mosquitto/log
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-18080}:8080"
+    networks:
+      - evaluation
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+networks:
+  evaluation:
+    internal: true

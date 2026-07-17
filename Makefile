@@ -7,7 +7,7 @@ COMPOSE := docker compose
 # Detect whether FORCE is set for destructive operations
 FORCE ?= 0
 
-.PHONY: help init up down restart status logs validate test \
+.PHONY: help init up down restart status logs validate test test-architecture \
         create-user change-password delete-user \
         dynsec migrate-dynsec rollback-dynsec \
         backup restore clean
@@ -45,6 +45,9 @@ test: ## Run integration tests
 	done
 	@echo ""
 	@echo "All tests passed."
+
+test-architecture: ## Validate the MQTT administration architecture decision
+	@bash tests/test-admin-console-architecture.sh
 
 create-user: ## Create a new MQTT user (set USERNAME=<name>)
 	@./scripts/create-user.sh $(USERNAME)
