@@ -186,6 +186,9 @@ class Task7ArchitectureContractTest(unittest.TestCase):
         tls_test = read("tests/test-tls-verification.sh")
         self.assertIn("-verify_return_error", tls_test)
         self.assertIn("-verify_ip", tls_test)
+        self.assertIn("-brief", tls_test)
+        self.assertIn("Verification: OK", tls_test)
+        self.assertIn("Verify return code: 0", tls_test)
         self.assertNotIn('grep -c "Verify return code: 0"', tls_test)
 
 

@@ -22,13 +22,17 @@ CA_FILE="${REPO_ROOT}/mosquitto/config/certs/ca.crt"
 [[ -f "${CA_FILE}" ]] || die "CA certificate not found: ${CA_FILE}."
 
 echo "--- Test: TLS 1.2 handshake with correct CA succeeds ---"
-openssl s_client \
+TLS_OUTPUT="$(openssl s_client \
   -connect "${MQTT_HOST}:${MQTT_PORT}" \
   -CAfile "${CA_FILE}" \
   -verify_return_error \
   -verify_ip "${MQTT_HOST}" \
-  -tls1_2 </dev/null >/dev/null 2>&1 \
-  || die "TLS 1.2 connection with correct CA and IP SAN failed."
+  -brief \
+  -tls1_2 </dev/null 2>&1 || true)"
+if ! grep -Eq 'Verification: OK|Verify return code: 0 \(ok\)' <<<"${TLS_OUTPUT}"; then
+  printf '%s\n' "${TLS_OUTPUT}" >&2
+  die "TLS 1.2 connection with correct CA and IP SAN failed."
+fi
 pass "TLS 1.2 with correct CA succeeds"
 
 echo "--- Test: wrong CA fails TLS handshake ---"
