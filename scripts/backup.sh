@@ -94,6 +94,8 @@ ARCHIVE="${OUTPUT_DIR}/${BACKUP_NAME}.tar.gz"
 info "Creating archive ${ARCHIVE}..."
 tar -czf "${ARCHIVE}" -C "${TMPDIR}" "${BACKUP_NAME}"
 chmod 600 "${ARCHIVE}"
+printf '%s\n' "${TIMESTAMP}" > "${OUTPUT_DIR}/last-backup"
+chmod 600 "${OUTPUT_DIR}/last-backup"
 
 info "Backup complete: ${ARCHIVE}"
 info "Archive contains sensitive authorization state; keep mode 600 and encrypt at rest."

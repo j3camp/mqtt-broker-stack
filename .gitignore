@@ -1,5 +1,11 @@
 # Runtime secrets - never commit
 .env
+admin/secrets/
+
+# Local admin API state
+admin-api/admin.db
+admin-api/.pytest_cache/
+.pytest_cache/
 
 # Generated certificates and keys
 mosquitto/config/certs/*.key

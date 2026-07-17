@@ -1,0 +1,121 @@
+---
+services:
+  admin-ui:
+    build:
+      context: ./admin-ui
+    restart: unless-stopped
+    depends_on:
+      admin-api:
+        condition: service_healthy
+    ports:
+      - "${ADMIN_BIND_ADDRESS:-127.0.0.1}:${ADMIN_PORT:-8088}:8080"
+    networks:
+      - mqtt-admin-edge
+      - mqtt-admin-internal
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:uid=101,gid=101,mode=0755
+      - /var/run:uid=101,gid=101,mode=0755
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  admin-api:
+    build:
+      context: ./admin-api
+    restart: unless-stopped
+    depends_on:
+      admin-db:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+      dynsec-bootstrap:
+        condition: service_completed_successfully
+    environment:
+      ADMIN_ENVIRONMENT: ${ADMIN_ENVIRONMENT:-development}
+      ADMIN_PUBLIC_URL: ${ADMIN_PUBLIC_URL:-http://localhost:8088}
+      ADMIN_ALLOWED_HOSTS: ${ADMIN_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      ADMIN_COOKIE_SECURE: ${ADMIN_COOKIE_SECURE:-false}
+      ADMIN_LOCAL_AUTH_ENABLED: ${ADMIN_LOCAL_AUTH_ENABLED:-true}
+      ADMIN_BOOTSTRAP_USERNAME: ${ADMIN_BOOTSTRAP_USERNAME:-admin}
+      ADMIN_BROKER_HOST: ${MQTT_CONTROL_HOSTNAME:-mosquitto-control}
+      ADMIN_BROKER_PORT: "1884"
+      DYNSEC_ADMIN_USERNAME: ${DYNSEC_ADMIN_USERNAME:-admin}
+      ADMIN_CERTIFICATE_WARNING_DAYS: ${ADMIN_CERTIFICATE_WARNING_DAYS:-30}
+      ADMIN_BACKUP_MAX_AGE_HOURS: ${ADMIN_BACKUP_MAX_AGE_HOURS:-24}
+      ADMIN_OIDC_DISCOVERY_URL: ${ADMIN_OIDC_DISCOVERY_URL:-}
+      ADMIN_OIDC_CLIENT_ID: ${ADMIN_OIDC_CLIENT_ID:-}
+      ADMIN_OIDC_ROLE_CLAIM: ${ADMIN_OIDC_ROLE_CLAIM:-mqtt_admin_role}
+      TRUSTED_PROXY_IPS: ${ADMIN_TRUSTED_PROXY_IPS:-*}
+    networks:
+      - mqtt-admin-internal
+      - mqtt-control
+    volumes:
+      - ./mosquitto/config/certs:/mosquitto/config/certs:ro
+      - ./backups:/broker-status:ro
+    secrets:
+      - dynsec_admin_password
+      - admin_db_password
+      - admin_session_secret
+      - admin_bootstrap_password
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  admin-db:
+    image: postgres:17.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mqtt_admin
+      POSTGRES_USER: mqtt_admin
+      POSTGRES_PASSWORD_FILE: /run/secrets/admin_db_password
+    networks:
+      - mqtt-admin-internal
+    volumes:
+      - admin-db-data:/var/lib/postgresql/data
+    secrets:
+      - admin_db_password
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mqtt_admin -d mqtt_admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+networks:
+  mqtt-admin-edge:
+    driver: bridge
+  mqtt-admin-internal:
+    driver: bridge
+    internal: true
+
+volumes:
+  admin-db-data:
+
+secrets:
+  admin_db_password:
+    file: ./admin/secrets/db-password
+  admin_session_secret:
+    file: ./admin/secrets/session-secret
+  admin_bootstrap_password:
+    file: ./admin/secrets/bootstrap-password

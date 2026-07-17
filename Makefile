@@ -8,6 +8,7 @@ COMPOSE := docker compose
 FORCE ?= 0
 
 .PHONY: help init up down restart status logs validate test test-architecture \
+        admin-init admin-up admin-down admin-logs admin-test \
         create-user change-password delete-user \
         dynsec migrate-dynsec rollback-dynsec \
         backup restore clean
@@ -48,6 +49,21 @@ test: ## Run integration tests
 
 test-architecture: ## Validate the MQTT administration architecture decision
 	@bash tests/test-admin-console-architecture.sh
+
+admin-init: ## Generate local secrets for the administration console
+	@bash ./scripts/init-admin.sh
+
+admin-up: ## Start the broker and administration console
+	@$(COMPOSE) -f compose.yaml -f compose.admin.yaml up -d --build
+
+admin-down: ## Stop the broker and administration console
+	@$(COMPOSE) -f compose.yaml -f compose.admin.yaml down
+
+admin-logs: ## Follow administration console logs
+	@$(COMPOSE) -f compose.yaml -f compose.admin.yaml logs -f admin-ui admin-api admin-db
+
+admin-test: ## Run administration API unit and contract tests
+	@python3 -m pytest admin-api/tests
 
 create-user: ## Create a new MQTT user (set USERNAME=<name>)
 	@./scripts/create-user.sh $(USERNAME)

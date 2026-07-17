@@ -8,6 +8,7 @@
 - `evaluations/`：各候選的一手證據、PoC 結果與限制。
 - `poc/`：隔離且固定版本的評估環境。
 - `../adr/0001-mqtt-admin-console.md`：已接受的架構決策。
+- `implementation.md`：Task #13 MVP 的部署、RBAC、稽核與驗證說明。
 
 執行下列測試驗證決策套件：
 

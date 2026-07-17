@@ -9,6 +9,16 @@ docker compose up -d
 ./scripts/validate.sh
 ```
 
+啟用管理後台：
+
+```bash
+bash ./scripts/init-admin.sh
+docker compose -f compose.yaml -f compose.admin.yaml up -d --build
+docker compose -f compose.yaml -f compose.admin.yaml ps
+```
+
+管理後台 readiness 會同時驗證 database、session secret、broker credential、CA 檔案，以及 Dynamic Security control API 可達性。任何相依服務失敗都會回報 HTTP 503，而不會把舊資料標示為 healthy。
+
 非互動初始化可用 `DYNSEC_ADMIN_PASSWORD` 提供管理密碼；請只在受保護的 CI secret 或秘密管理工具中設定。
 
 ## 帳號與 RBAC
@@ -66,3 +76,6 @@ openssl x509 -noout -dates -in mosquitto/config/certs/server.crt
 | `make rollback-dynsec` | 回復最後一次遷移 |
 | `make backup`／`restore` | 備份與還原 |
 | `make test` | 執行 shell 整合測試 |
+| `make admin-init` | 產生管理後台本機 secrets |
+| `make admin-up`／`admin-down` | 啟停 broker 與管理後台 |
+| `make admin-test` | 執行管理後台單元與契約測試 |
