@@ -107,6 +107,10 @@ jobs:
       - name: Prepare administrator and legacy migration fixtures
         run: |
           ./scripts/bootstrap-dynsec.sh --force
+          # The Mosquitto DynSec plugin drops to uid 1883 before reading the
+          # secret file.  The file must therefore be owned by that uid so that
+          # the bind-mounted Docker secret is accessible inside the container.
+          sudo chown 1883:1883 mosquitto/config/security/dynsec-admin-password
           bash .github/scripts/ci-create-user.sh
           cat > mosquitto/config/security/acl <<'EOF'
           user ci-admin
@@ -145,7 +149,18 @@ jobs:
 
       - name: Migrate legacy identities and ACLs
         run: |
-          docker compose wait dynsec-bootstrap
+          # `docker compose wait` can fail when the container exits before the
+          # command runs.  Use `docker wait` on the container ID instead; it
+          # blocks if the container is still running and returns immediately
+          # (with its exit code) if it has already exited.
+          BOOTSTRAP_ID="$(docker compose ps -a -q dynsec-bootstrap 2>/dev/null || true)"
+          if [ -n "$BOOTSTRAP_ID" ]; then
+            EXIT_CODE="$(docker wait "$BOOTSTRAP_ID")"
+            if [ "$EXIT_CODE" != "0" ]; then
+              docker compose logs dynsec-bootstrap
+              exit "$EXIT_CODE"
+            fi
+          fi
           ./scripts/migrate-dynsec.sh \
             --password-file mosquitto/config/security/passwords \
             --acl-file mosquitto/config/security/acl \
